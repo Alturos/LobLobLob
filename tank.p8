@@ -81,7 +81,7 @@ function initgame()
  --here we add tanks based on game mode
  for i=1,players,1 do
   local team = colourlist[flr(rnd(#colourlist)+1)]
-  del(colourlist, team+1)
+  del(colourlist, team)
   add_tank(team,(fieldwidth-24)/players*i) -- team
  end
 end
@@ -95,12 +95,14 @@ function add_tank(team,x)
   y=heightmap[x]-7,
   health=100,
   angle=45,
-  power=10,
+  power=50,
   frame=0,
   item=9,
   ox=4,
   oy=4,
   shp=0,
+  grade_r=0,
+  grade_l=0,
   ax=cos(45/360),
   ay=sin(45/360),
   cpu=false,
@@ -228,6 +230,7 @@ function updatebullets()
     end
    end
    if(t.shp < 1) t.shield = false t.deflector = false
+   if(hit) break
   end
   if(b.x < 0 or b.x >= fieldwidth
      or b.y >= heightmap[flr(b.x)+1]
@@ -266,10 +269,10 @@ end
 
 function updatemove()
  message="move"
- local tx = 0
- local cx = flr(ct.x)
- local cy = flr(ct.y)
+ local tx, cx, cy = 0, flr(ct.x), flr(ct.y)
  local floor = cy + 8
+ ct.grade_l=0
+ ct.grade_r=0
  if (btn(1) and cx+8 < fieldwidth) then
   tx += tankspeed * step
   local p6,p7,p8 = heightmap[cx+7],heightmap[cx+8],heightmap[cx+9]
@@ -281,6 +284,10 @@ function updatemove()
   local maxgrade = max(p1-p0,p0-pn1)
   if((pn1 < floor and maxgrade > 3) or (p0 < floor and (floor - p0) > 4)) tx = 0
  end
+ local center,r,l = heightmap[flr(ct.x)+5],heightmap[flr(ct.x)+6],heightmap[flr(ct.x)+4]
+ ct.grade_l = center-l
+ ct.grade_r = center-r
+ ct.y = center-8
  ct.x = max(0,min(fieldwidth,ct.x + tx))
  if(flr(ct.x) != cx) ct.tracktgl = not ct.tracktgl
  if(btnp(4) or btnp(5)) nextstate = firing
@@ -419,7 +426,13 @@ function drawgame()
    pal(2,band(c,0x00f))
   end
   if(t.tracktgl) pal(13,5) pal(5,13)
-  if(t.health > 0) then spr(t.sprite,t.x,t.y) spr(t.frame,t.x,t.y-1)
+  if(t.health > 0) then 
+   if(t.grade_l == t.grade_r) then spr(t.sprite,t.x,t.y)
+   elseif(t.grade_r > 1 or t.grade_l < -1) then spr(17,t.x,t.y)
+   elseif(t.grade_l > 1 or t.grade_r < -1) then spr(17,t.x,t.y,1,1,true)
+   elseif(t.grade_r > 0 or t.grade_l < 0) then spr(16,t.x,t.y)
+   elseif(t.grade_l > 0 or t.grade_r < 0) then spr(16,t.x,t.y,1,1,true) end
+   spr(t.frame,t.x,t.y-1)
   elseif(t.deathclock>40) then -- nuffin
   elseif(t.deathclock>30) then spr(29,t.x-4,t.y-8,2,2)
   elseif(t.deathclock>20) then spr(27,t.x-4,t.y-8,2,2)
