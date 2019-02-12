@@ -403,7 +403,12 @@ end
 function drawgame()
  camera(camx,camy)
  pal()
- rectfill(0,-128,fieldwidth,128,1)
+ rectfill(0,44,fieldwidth,128,1)
+ camera(camx*.1,camy)
+ map(0,0,0,12,8,4)
+ map(0,0,64,12,8,4)
+ map(0,0,128,12,3,4)
+ camera(camx,camy)
  local t=nil
  for t in all(tanks) do
   t.frame=2+flr(t.angle/180*11)
