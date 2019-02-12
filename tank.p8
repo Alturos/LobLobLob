@@ -36,14 +36,14 @@ bloomtypes={
     0x028e, --red
     0x289a --yellow/orange
 }
-items_select={
- { ico=32, name="shell" },
- { ico=33, name="roll" },
- { ico=34, name="bomb" },
- { ico=53, name="lpfrg" },
- { ico=49, name="nplm" },
- { ico=50, name="mirv" },
- { ico=40, name="astrk"},
+items={
+ { ico=32, name="shell", dmg=50,spalsh=25,size=1 },
+ { ico=33, name="roll", dmg=75,spalsh=25,size=2},
+ { ico=34, name="bomb", dmg=50,spalsh=25, size=4 },
+ { ico=53, name="lpfrg", dmg=50,spalsh=25, size=2 },
+ { ico=49, name="nplm", dmg=0,spalsh=25 },
+ { ico=50, name="mirv", dmg=25,spalsh=50, size=2 },
+ { ico=40, name="astrk", dmg=0,splash=75, size=3},
  { ico=35, name="shld" },
  { ico=48, name="defl" },
  { ico=51, name="chute" },
@@ -59,6 +59,7 @@ colours={
     0xaf9, -- yellow
     0x671  -- light grey
 }
+bulletfade={10,10,10,10,10,10,9,9,9,15,15,8,8}
 shopitem=1
 show_itemselect=false
 show_store=false
@@ -106,7 +107,8 @@ function add_tank(team,x)
   chute=false,
   shield=false,
   deflector=false,
-  tracktgl=false
+  tracktgl=false,
+  deathclock=0
  }
  for i=1, 8, 1 do
   heightmap[t.x+i] = t.y+8
@@ -124,18 +126,19 @@ function initmap()
  end
 end
 
-function addbloom(type, x, y)
+function addbloom(type, x, y, size, dmg)
  add(blooms, {
      type=type,
      x=x,
      y=y,
-     time=0
+     time=0,
+     dmg=dmg
  })
 end
 
 function addbullet(x,y,velx,vely,id)
  local b={
-  x=x,y=y,velx=velx,vely=vely,id=id,life=0
+  x=x,y=y,velx=velx,vely=vely,id=id,life=0,idx=1
  }
  add(bullets,b)
 end
@@ -178,11 +181,15 @@ end
 
 function updatebullets()
  for i=#bullets,1,-1 do
-  local b, hit = bullets[i], false
+  local b,hit,itm,cancel = bullets[i], false, items[bullets[i].id], false
   b.vely += gravity * step
+  b.px = b.x
+  b.py = b.y
   b.x += b.velx * step
   b.y += b.vely * step
   b.life += 1
+  b.idx += 1
+  if(b.idx > #bulletfade) b.idx = 1
   far_r = max(far_r, b.x)
   far_l = min(far_l, b.x)
   for t in all(tanks) do
@@ -192,13 +199,21 @@ function updatebullets()
     if(dist <= shield_r and (t!=ct or b.life > 10)) then
      -- hit shield, explode
      hit = true
-     t.shp -= 1
+     local ehp = t.shp * 25 - (itm.dmg or 0)
+     if(ehp > 0) then
+      -- shield absorbed the hit, don't explode (except napalm)
+      cancel = true
+      t.shp = ceil(ehp/25)
+     else
+      -- shield broken, munition will explode and full splash damage will be applied
+      t.shp = 0
+     end
     end
    elseif(t.deflector and t.shp > 0) then
     if(dist <= defl_r and (t!=ct or b.life > 10)) then
      -- hit deflector, calculate bounce
      local normal = v_normalized(diff)
-     local vel = {x=b.velx,y=b.vely}
+     local vel = {x=b.velx,y=b.vely * -1}
      local dot = v_dot(vel, normal)
      local newvel = v_add(v_mult(normal,-2*dot), vel)
      b.velx = newvel.x
@@ -208,6 +223,7 @@ function updatebullets()
    else
     if((ct != t or b.life > 10) and (dist <= 1 or (b.x >= t.x and b.x < t.x + 7 and b.y > t.y + 3 and b.y < t.y + 8))) then
      -- hit tank, explode
+     t.health -= itm.dmg
      hit = true
     end
    end
@@ -220,13 +236,16 @@ function updatebullets()
   end
   if(hit) then
    del(bullets, b)
+   if(itm.size > 0 and not cancel) then
+    addbloom(1, b.x, b.y, itm.size, itm.dmg)
+   end
   end
  end
 
 end
 
 function updateblooms()
-
+ blooms={}
 end
 
 function updatemovecam()
@@ -284,8 +303,8 @@ function updateaim()
  if(btnp(4)) nextstate = movecam
  if(btnp(5)) then
   nextstate = firing
-  local x = ct.x + 4 + (4 * ct.ax)
-  local y = ct.y + 2 + (4 * ct.ay)
+  local x = ct.x + 4 + (5 * ct.ax)
+  local y = ct.y + 2 + (5 * ct.ay)
   addbullet(x,y,ct.ax*ct.power,ct.ay*ct.power,1)
  end
 end
@@ -294,7 +313,7 @@ function updatefiring()
  updatebullets()
  updateblooms()
  
- if(far_r > camx + 116) camx = far_r - 116
+ --if(far_r > camx + 116) camx = far_r - 116
  --if(far_l < camx) camx = far_l
  if(#blooms<1 and #bullets<1) then
   nextstate = death
@@ -305,7 +324,15 @@ function updatedeath()
  -- handle any post death 'splosions
  updatebullets()
  updateblooms()
- if(#blooms<1 and #bullets<1) then
+ local dying = false
+ for i=#tanks, 1, -1 do
+  local t=tanks[i]
+  
+  if(t.health < 1) t.deathclock += 1 dying = true camx = max(0, min(fieldwidth-128,t.x-60))
+  if(t.deathclock > 51) del(tanks,t) dying = false
+ end
+
+ if(#blooms<1 and #bullets<1 and not dying) then
   activetank += 1
   if(activetank > #tanks) activetank = 1
   ct = tanks[activetank]
@@ -330,12 +357,12 @@ end
 function updateselect()
  show_itemselect=true
  message="select item"
- if (btnp(1)) shopitem = min(#items_select, shopitem + 7)
+ if (btnp(1)) shopitem = min(#items, shopitem + 7)
  if (btnp(0)) shopitem -= 7
  if (btnp(2)) shopitem -= 1
  if (btnp(3)) shopitem += 1
- if(shopitem<1) shopitem = #items_select
- if(shopitem>#items_select) shopitem = 1
+ if(shopitem<1) shopitem = #items
+ if(shopitem>#items) shopitem = 1
  if(btnp(4)) nextstate = movecam
  if(btnp(5)) then 
   nextstate = movecam
@@ -387,9 +414,14 @@ function drawgame()
    pal(2,band(c,0x00f))
   end
   if(t.tracktgl) pal(13,5) pal(5,13)
-  spr(t.sprite,t.x,t.y)
+  if(t.health > 0) then spr(t.sprite,t.x,t.y) spr(t.frame,t.x,t.y-1)
+  elseif(t.deathclock>40) then -- nuffin
+  elseif(t.deathclock>30) then spr(29,t.x-4,t.y-8,2,2)
+  elseif(t.deathclock>20) then spr(27,t.x-4,t.y-8,2,2)
+  elseif(t.deathclock>10) then spr(42,t.x,t.y)
+  else spr(41,t.x,t.y) end
   pal()
-  spr(t.frame,t.x,t.y-1)
+  
   if(t.shield and t.shp > 0) circ(t.x+4,t.y+4,shield_r,sget(124-t.shp,0))
   if(t.deflector and t.shp > 0) circ(t.x+4,t.y+4,defl_r,sget(128-t.shp,0))
   if(t == ct) then
@@ -399,7 +431,8 @@ function drawgame()
  end
  drawmap()
  for b in all(bullets) do
-  pset(b.x,b.y,10)
+  pset(b.px, b.py,2)
+  pset(b.x,b.y,bulletfade[b.idx])
  end
  drawui()
  if(stat(34)==1) then
@@ -425,7 +458,7 @@ function drawui()
  rect(25,2,62,8,7)
  if(t.health>0) rectfill(26,3,26+t.health/100*35,7, 8)
  -- item
- local itm = items_select[t.item]
+ local itm = items[t.item]
  print("item:" .. itm.name,66,3,7)
  palt(12,true)
  spr(itm.ico,106-(5-#itm.name)*4,1)
@@ -463,9 +496,9 @@ function drawselectitem()
     rect(32,32,96,97,7)
     rectfill(33,33,95,96,0)
     local y=34 x=34
-    for itm in all(items_select) do
-     local selected = itm == items_select[ct.item]
-     local shopselect = itm == items_select[shopitem]
+    for itm in all(items) do
+     local selected = itm == items[ct.item]
+     local shopselect = itm == items[shopitem]
      if(shopselect) then palt(12,true)
      elseif(selected) then pal(12,11) end
      spr(itm.ico, x, y)
@@ -512,7 +545,7 @@ end
 -->8
 --helpers
 function useitem()
- local used,st,itm=false,firing,items_select[ct.item]
+ local used,st,itm=false,firing,items[ct.item]
  if(itm.name == "chute") then ct.chute = not ct.chute used = true
  elseif(itm.name == "shld") then ct.shp = 4 ct.shield = true ct.deflector = false used = true
  elseif(itm.name == "defl") then ct.shp = 4 ct.deflector = true ct.shield = false used = true
@@ -579,7 +612,7 @@ function fadepalette(idx, fullscreen)
 	pal(15, sget(120 + idx, 15), fullscreen)
 end
 __gfx__
-0000000000000000000000000000000000000005000000500000500000050000000050000005000005000000500000000000000000000000cccccccc76d5ed25
+0000000000000000000000000000000000000005000000500000500000050000000050000005000005000000500000000000000000000000cccccccc76d5e2d5
 0000000000000000000000000000000000000050000005600000560000056000000650000065000006500000050000000000000000000000cccccccc11000000
 007007000008e000000000000000055500000560000056000000560000056000000650000065000000650000065000005550000000000000cccccccc21100000
 0007700000888e00000005550000066000000600000006000000060000000000000000000060000000600000006000000660000055500000cccccccc33110000
