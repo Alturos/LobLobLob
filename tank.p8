@@ -13,6 +13,8 @@ maxslope=3
 minstart=68
 maxstart=92
 heightmap={}
+grassmap={}
+fallingdirt={}
 camx=0
 camy=0
 nextcamx=0
@@ -120,6 +122,7 @@ function add_tank(team,x)
  }
  for i=1, 8, 1 do
   heightmap[t.x+i] = t.y+8
+  grassmap[t.x+i] = heightmap[t.x+i] + 3
  end
  add(tanks,t)
 end 
@@ -127,8 +130,9 @@ end
 function initmap()
  local x = 0
  local y = flr(rnd(maxstart-minstart)) + minstart
- for x=0,(fieldwidth - 1) do
+ for x=1,fieldwidth do
   add(heightmap, y)
+  add(grassmap, y+3)
   local slope = flr(rnd(maxslope*2+1))-maxslope
   y = max(4, y-slope)
  end
@@ -259,7 +263,34 @@ function updateblooms()
  for i=#blooms,1,-1 do
   local bl = blooms[i]
   bl.time += 1
-  if(bl.time > 80) del(blooms, bl)
+  if(bl.time == 25) then
+   local sz=bl.size
+   local cx,cy = flr(bl.x),flr(bl.y)
+   local mnx,mny,mxx,mxy = cx-sz, cy-sz, cx+sz, cy+sz
+   for x = -sz, sz, 1 do
+    local miny,maxy,height=1000,-1000,heightmap[x+1+cx]
+    for y = -sz, sz, 1 do
+     if(x*x + y*y <= sz*sz) then
+      if(height <= y+cy and y+cy < miny) miny = y+cy -- hit
+      maxy = max(y+cy,maxy)
+     end
+    end
+    
+    if(miny != 1000 and maxy != -1000) then
+     if(miny == height) then 
+      -- circle is at or above the top of the column
+      heightmap[x+1+cx] = maxy + 1
+     elseif(miny > height) then 
+      -- circle is top of the column
+      -- todo: add leftover dirt to dirt map to fall in another step.
+      heightmap[x+1+cx] = maxy + 1 - (miny-height) 
+     end
+    end
+   end
+  end
+  if(bl.time > 80) then
+   del(blooms, bl)
+  end
  end
 end
 
@@ -526,8 +557,8 @@ end
 
 function drawmap()
  for x=1, #heightmap do
-  rectfill(x-1, heightmap[x]+3, x-1, 128, 4)
-  rectfill(x-1, heightmap[x], x-1, heightmap[x]+2, 3)
+  rectfill(x-1, heightmap[x], x-1, 128, 4)
+  if(heightmap[x] <= grassmap[x]) rectfill(x-1, heightmap[x], x-1, grassmap[x], 3)
  end
 end
 
