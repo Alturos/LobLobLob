@@ -15,12 +15,9 @@ maxstart=92
 heightmap={}
 grassmap={}
 fallingdirt={}
-camx=0
-camy=0
-nextcamx=0
-nextcamy=0
-camspeed=30
-camspeed=0
+cam={x=0,y=0}
+camtarget=nil
+camspeed=90
 anglespeed=0
 pspeed=0
 tankspeed=10
@@ -153,7 +150,7 @@ function addbullet(x,y,velx,vely,id,col)
  local b={
   x=x,y=y,velx=velx,vely=vely,id=id,life=0,idx=1,c=col
  }
- add(bullets,b)
+ return add(bullets,b)
 end
 
 -->8
@@ -171,7 +168,6 @@ function _update60()
  end
 
  ct = tanks[activetank]
- camfocus = ct
  if(state == pregame) then
   updatepregame()
  elseif(state == aim) then
@@ -189,12 +185,15 @@ function _update60()
  elseif(state == death) then
   updatedeath()
  end
- updateblooms()
+
+ updatecamera()
 end
 
 function updatebullets()
  for i=#bullets,1,-1 do
   local b,hit,itm,cancel = bullets[i], false, items[bullets[i].id], false
+  camtarget = b
+  local lvy = b.vely
   b.vely += gravity * step
   b.px = b.x
   b.py = b.y
@@ -203,6 +202,14 @@ function updatebullets()
   b.life += 1
   b.idx += 1
   if(b.idx > #bulletfade) b.idx = 1
+
+  if(itm.name == "mirv" and b.vely >= 0 and lvy < 0) then
+   b.split = true
+   local b1 = addbullet(b.x,b.y,b.velx * 1.5, b.vely, b.id, b.col)
+   b1.split = true
+   local b2 = addbullet(b.x,b.y,b.velx * .5, b.vely, b.id, b.col)
+   b2.split = true
+  end
   far_r = max(far_r, b.x)
   far_l = min(far_l, b.x)
   for t in all(tanks) do
@@ -234,7 +241,7 @@ function updatebullets()
      t.shp -= 1
     end
    else
-    if((ct != t or b.life > 10) and (dist <= 1 or (b.x >= t.x and b.x < t.x + 7 and b.y > t.y + 3 and b.y < t.y + 8))) then
+    if((ct != t or b.life > 10) and (dist <= 1 or (b.x >= t.x and b.x < (t.x + 7) and b.y > (t.y + 3) and b.y < (t.y + 8)))) then
      -- hit tank, explode
      t.health -= itm.dmg
      hit = true
@@ -250,7 +257,7 @@ function updatebullets()
   end
   if(hit) then
    del(bullets, b)
-   if(itm.size and not cancel) then
+   if(itm.size and not cancel and (b.split or itm.name != "mirv")) then
     addbloom(1, b.x, b.y, itm.size, itm.dmg)
     if(itm.mag and itm.duration) setshake(itm.mag,itm.duration)
    end
@@ -259,16 +266,17 @@ function updatebullets()
 
 end
 
-function updateblooms()
+function updateblooms(firing)
  for i=#blooms,1,-1 do
   local bl = blooms[i]
-  bl.time += 1
+  camtarget = bl
+  if(bl.time < 21 or not firing) bl.time += 1
   if(bl.time == 25) then
    local sz=bl.size
    local cx,cy = flr(bl.x),flr(bl.y)
    local mnx,mny,mxx,mxy = cx-sz, cy-sz, cx+sz, cy+sz
    for x = -sz, sz, 1 do
-    local miny,maxy,height=1000,-1000,heightmap[x+1+cx]
+    local miny,maxy,height=1000,-1000,heightmap[x+1+cx] or 128
     for y = -sz, sz, 1 do
      if(x*x + y*y <= sz*sz) then
       if(height <= y+cy and y+cy < miny) miny = y+cy -- hit
@@ -288,21 +296,20 @@ function updateblooms()
     end
    end
   end
-  if(bl.time > 80) then
-   del(blooms, bl)
-  end
+  if(bl.time > 80) del(blooms, bl)
  end
 end
 
 function updatemovecam()
   message="camera"
+  camtarget = nil
   local cx, cy = 0, 0
   if (btn(1)) cx += 1
   if (btn(0)) cx -= 1
   if (btn(2)) cy -= 1
   if (btn(3)) cy += 1
-  camx = max(0,min(128,camx + cx))
-  camy = max(-128,min(0,camy + cy))
+  cam.x = max(0,min(128,cam.x + cx))
+  cam.y = max(-128,min(0,cam.y + cy))
   if(btnp(4)) then
    sfx(12)
    nextstate = select
@@ -313,6 +320,7 @@ end
 
 function updatemove()
  message="move"
+ camtarget = ct
  local tx, cx, cy = 0, flr(ct.x), flr(ct.y)
  local floor = cy + 8
  ct.grade_l=0
@@ -367,39 +375,46 @@ function updateaim()
 end
 
 function updatefiring()
+ camtarget = nil
  updatebullets()
- updateblooms()
+ updateblooms(true)
  
- --if(far_r > camx + 116) camx = far_r - 116
- --if(far_l < camx) camx = far_l
- if(#blooms<1 and #bullets<1) then
+ --if(far_r > cam.x + 116) cam.x = far_r - 116
+ --if(far_l < cam.x) cam.x = far_l
+ if(#bullets<1) then
   nextstate = death
+  statetime = 100
  end
 end
 
 function updatedeath()
  -- handle any post death 'splosions
+ camtarget = nil
  updatebullets()
- updateblooms()
+ updateblooms(false)
+ if(#blooms > 0) return
  local dying = false
  for i=#tanks, 1, -1 do
   local t=tanks[i]
   
-  if(t.health < 1) t.deathclock += 1 dying = true camx = max(0, min(fieldwidth-128,t.x-60))
+  if(t.health < 1) t.deathclock += 1 dying = true cam.x = max(0, min(fieldwidth-128,t.x-60))
   if(t.deathclock > 51) del(tanks,t) dying = false
  end
 
  if(#blooms<1 and #bullets<1 and not dying) then
-  activetank += 1
-  if(activetank > #tanks) activetank = 1
-  ct = tanks[activetank]
-  camx = max(0, min(fieldwidth-128,ct.x-60))
-  nextstate = movecam
+  statetime -= 1
+  if(statetime == 90) then
+   activetank += 1
+   if(activetank > #tanks) activetank = 1
+   ct = tanks[activetank]
+  end
+  if(statetime <= 90) camtarget = ct
+  if(statetime <= 0) nextstate = movecam
  end
 end
 
 function updateshop()
-
+  camtarget = nil
 end
 
 function updatetitle()
@@ -413,6 +428,7 @@ function updatetitle()
 end
 
 function updateselect()
+ camtarget = nil
  show_itemselect=true
  message="select item"
  if (btnp(1)) shopitem = min(#items, shopitem + 6) sfx(9)
@@ -441,6 +457,17 @@ function updatesplash()
 
 end
 
+function updatecamera()
+ if(camtarget == nil) return
+ focus = {x=camtarget.x-60, y=camtarget.y-64}
+ camdiff = v_subtr(cam,focus)
+ if(flr(v_len(camdiff.x, camdiff.y)) >= 1) then
+  cam = v_add(v_mult(v_normalized(camdiff), camspeed * step), cam)
+  cam.x = mid(cam.x, 0, fieldwidth-128)
+  cam.y = mid(cam.y, -128, 0)
+ end
+end
+
 -->8
 --draw
 function _draw()
@@ -461,10 +488,10 @@ end
 
 function drawgame()
  screen_shake()
- camera(camx,camy)
+ camera(cam.x,cam.y)
  pal()
  rectfill(0,44,fieldwidth,128,1)
- camera(camx*.1,camy*1.1)
+ camera(cam.x*.1,cam.y*1.1)
  map(0,0,0,12,8,4)
  map(0,0,64,12,8,4)
  map(0,0,128,12,3,4)
@@ -553,6 +580,7 @@ function drawui()
   print(message, x+3,20,7)
  end
  if(show_itemselect) drawselectitem()
+ --print("[" .. cam.x .. "," .. cam.y .. "]",2,122,7)
 end
 
 function drawmap()
@@ -643,7 +671,9 @@ function useitem()
 end
 
 function v_len(x, y)
- return sqrt(x*x + y*y)
+  local d = max(abs(x),abs(y))
+  local n = min(abs(x),abs(y)) / d
+  return sqrt(n*n + 1) * d
 end
 
 function v_subtr(a,b)
@@ -654,7 +684,7 @@ function v_subtr(a,b)
 end
 
 function v_normalized(v)
- local len,nv = v_len(v.x, v.y), {x=v.x,y=v.x}
+ local len,nv = v_len(v.x, v.y), {x=v.x,y=v.y}
  if(len != 0) nv.x /= len nv.y /= len
  return nv
 end
@@ -683,7 +713,7 @@ function v_add(a,b)
 end
 
 function setcam()
- camera(camx+offset_x, camy+offset_y)
+ camera(cam.x+offset_x, cam.y+offset_y)
 end
 
 function setshake(mag,duration)
@@ -702,6 +732,14 @@ function screen_shake()
   if offset<0.05 then
     offset=0
   end
+end
+
+function round(a)
+ return flr(a + .5)
+end
+
+function v_round(v)
+	return {x=round(v.x),y=round(v.y)}
 end
 
 function fadepalette(idx, fullscreen)
