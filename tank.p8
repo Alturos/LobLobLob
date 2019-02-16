@@ -3,6 +3,11 @@ version 16
 __lua__
 -- lob lob lob! a tank game
 -- bright moth games
+
+-- known bugs:
+-- Engine sound plays forever when moving at end of turn
+-- Camera doesn't track to next player after death
+
 title, pregame, aim, move, shop, movecam, select, firing, death, postgame = 0, 1, 2, 4, 8, 16, 32, 64, 128, 256
 state = title
 nextstate = title
@@ -41,28 +46,29 @@ bloomtypes={
     0x289a --yellow/orange
 }
 items={
- { ico=32, name="shell", dmg=50,spalsh=25,size=1,mag=1,duration=.065,c=8 },
- { ico=33, name="roll", dmg=75,spalsh=25,size=4,mag=2,duration=.075,c=10},
- { ico=34, name="bomb", dmg=50,spalsh=25, size=15,mag=3.5,duration=.3,c=14 },
- { ico=53, name="leap", dmg=50,spalsh=25, size=4,mag=2,duration=.075,c=11 },
- { ico=49, name="nplm", dmg=0,spalsh=25, c=9 },
- { ico=50, name="mirv", dmg=25,spalsh=50, size=8,mag=2,duration=.095,c=15 },
- { ico=40, name="araid", dmg=0,splash=75, size=10,mag=3,duration=.095,c=7},
+ { ico=32, name="shell", dmg=50, spalsh=25, size=1, mag=1, duration=.065, c=8 },
+ { ico=33, name="roll", dmg=75, spalsh=25, size=4, mag=2, duration=.075, c=10},
+ { ico=34, name="bomb", dmg=50, spalsh=25, size=15, mag=3.5, duration=.3, c=14 },
+ { ico=53, name="leap", dmg=50, spalsh=25, size=4, mag=2, duration=.075, c=11 },
+ { ico=49, name="nplm", dmg=0, spalsh=25, c=9 },
+ { ico=50, name="mirv", dmg=25, spalsh=50, size=8, mag=2, duration=.095, c=15 },
+ { ico=40, name="araid", dmg=0, splash=75, size=10, mag=3, duration=.095, c=7},
  { ico=35, name="shld" },
  { ico=48, name="defl" },
  { ico=51, name="chute"},
  { ico=52, name="fuel" },
  { ico=18, name="warp" }
 }
-colours={
-    0xc61, -- light blue
-    0x3b1, -- dark green
-    0x9a4, -- orange
-    0x4f2, -- brown
-    0xb63, -- light green
-    0xf64, -- tan
-    0xaf9, -- yellow
-    0x671  -- light grey
+teams={
+    {c=nil, name="red"},
+    {c=0xc61, name="skye"}, -- light blue
+    {c=0x3b1, name="hunter"}, -- dark green
+    {c=0x9a4, name="oj"}, -- orange
+    {c=0x4f2, name="mud"}, -- brown
+    {c=0xb63, name="forest"}, -- light green
+    {c=0xf64, name="coach"}, -- tan
+    {c=0xaf9, name="sunny"},-- yellow
+    {c=0x671, name="gary"}  -- light grey
 }
 bulletfade={10,10,10,10,10,10,9,9,9,15,15,8,8}
 shopitem=1
@@ -78,7 +84,7 @@ function _init()
 end
 
 function initgame()
- colourlist={0,1,2,3,4,5,6,7,8}
+ colourlist={1,2,3,4,5,6,7,8,9}
  tanks={}
  bullets={}
  blooms={}
@@ -215,7 +221,8 @@ function updatebullets()
   for t in all(tanks) do
    local diff= v_subtr(b,t)
    local dist= v_len(diff.x, diff.y)
-   if(t.shield and t.shp > 0) then
+   if(t.health <= 0) then -- nuffin
+   elseif(t.shield and t.shp > 0) then
     if(dist <= shield_r and (t!=ct or b.life > 10)) then
      -- hit shield, explode
      hit = true
@@ -272,6 +279,7 @@ function updateblooms(firing)
   camtarget = bl
   if(bl.time < 21 or not firing) bl.time += 1
   if(bl.time == 25) then
+   -- do all the damage calculations once we hit full size.
    local sz=bl.size
    local cx,cy = flr(bl.x),flr(bl.y)
    local mnx,mny,mxx,mxy = cx-sz, cy-sz, cx+sz, cy+sz
@@ -293,6 +301,19 @@ function updateblooms(firing)
       -- todo: add leftover dirt to dirt map to fall in another step.
       heightmap[x+1+cx] = maxy + 1 - (miny-height) 
      end
+    end
+   end
+   for t in all(tanks) do
+    local diff= v_subtr(bl,t)
+    local dist= v_len(diff.x, diff.y)
+    if(t.health > 0 and dist <= bl.size) then
+     -- linear interpolate damage over the blast radius
+     local dmg = lerp(1, bl.dmg, dist/bl.size)
+     -- shields eat half of any remaining damage, deflectors 25%
+     if(t.shield and t.shp > 0) dmg *= .5 t.shp -= 1
+     if(t.deflector and t.shp > 0) dmg *=.75 t.shp -= 1
+     -- round up the damage to whole numbers.
+     t.health -= ceil(dmg)
     end
    end
   end
@@ -392,25 +413,35 @@ function updatedeath()
  camtarget = nil
  updatebullets()
  updateblooms(false)
+ -- finish explosions before doing anything else.
  if(#blooms > 0) return
- local dying = false
+ local falling,dying = false,false
  for i=#tanks, 1, -1 do
   local t=tanks[i]
-  
-  if(t.health < 1) t.deathclock += 1 dying = true cam.x = max(0, min(fieldwidth-128,t.x-60))
-  if(t.deathclock > 51) del(tanks,t) dying = false
+  local fl=heightmap[flr(t.x)+1]
+  if(flr(t.y) + 8 < fl) then
+   t.y += gravity * step
+   falling =true
+  elseif(flr(t.y) + 8 != fl) then t.y = fl + 8 end
  end
 
- if(#blooms<1 and #bullets<1 and not dying) then
-  statetime -= 1
-  if(statetime == 90) then
-   activetank += 1
-   if(activetank > #tanks) activetank = 1
-   ct = tanks[activetank]
-  end
-  if(statetime <= 90) camtarget = ct
-  if(statetime <= 0) nextstate = movecam
+ if(falling) return
+ 
+ for i=#tanks, 1, -1 do
+  local t=tanks[i]
+  if(t.health <= 0) t.deathclock += 1 dying = true cam.x = max(0, min(fieldwidth-128,t.x-60))
+  if(t.deathclock == 1) setshake(5, .3)
+  if(t.deathclock > 51) dying = false
  end
+
+if(dying) return
+
+ statetime -= 1
+ if(statetime == 90) then
+  picknexttank()
+ end
+ if(statetime <= 90) camtarget = ct
+ if(statetime <= 0) nextstate = movecam
 end
 
 function updateshop()
@@ -499,14 +530,15 @@ function drawgame()
  local t=nil
  for t in all(tanks) do
   t.frame=2+flr(t.angle/180*11)
-  if(t.team > 0) then
-   c=colours[t.team]
+  local team=teams[t.team]
+  if(team.c) then
+   c=teams[t.team].c
    pal(8,shr(band(c,0xf00),8))
    pal(14,shr(band(c,0x0f0),4))
    pal(2,band(c,0x00f))
   end
   if(t.tracktgl) pal(13,5) pal(5,13)
-  if(t.health > 0) then 
+  if(t.health > 0 or t.deathclock < 1) then 
    if(t.grade_l == t.grade_r) then spr(t.sprite,t.x,t.y)
    elseif(t.grade_r > 1 or t.grade_l < -1) then spr(17,t.x,t.y)
    elseif(t.grade_l > 1 or t.grade_r < -1) then spr(17,t.x,t.y,1,1,true)
@@ -573,11 +605,12 @@ function drawui()
 
 
  if(message != nil) then
-  local width=(#message*4)+5
+  local msg = teams[ct.team].name .. ": " .. message
+  local width,cl=(#msg*4)+5,shr(band(teams[ct.team].c or 0x800,0xf00),8) or 8
   local x=128/2 -width/2
   rect(x-1,18,x+width+1,26,7)
   rectfill(x,19,x+width,25,0)
-  print(message, x+3,20,7)
+  print(msg, x+3,20,cl)
  end
  if(show_itemselect) drawselectitem()
  --print("[" .. cam.x .. "," .. cam.y .. "]",2,122,7)
@@ -622,6 +655,14 @@ function drawtitle()
  drawlob(5,8)
  drawlob(40,22)
  drawlob(75,36)
+end
+
+function picknexttank()
+ repeat
+  activetank += 1
+  if(activetank > #tanks) activetank = 1
+  ct = tanks[activetank]
+ until ct.health > 0
 end
 
 function drawsplash()
@@ -740,6 +781,10 @@ end
 
 function v_round(v)
 	return {x=round(v.x),y=round(v.y)}
+end
+
+function lerp(v0, v1, t)
+  return (1 - t) * v0 + t * v1;
 end
 
 function fadepalette(idx, fullscreen)
