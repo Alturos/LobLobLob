@@ -46,7 +46,7 @@ bloomtypes={
     0x289a --yellow/orange
 }
 items={
- { ico=32, name="shell", dmg=50, spalsh=25, size=1, mag=1, duration=.065, c=8 },
+ { ico=32, name="shell", dmg=50, spalsh=25, size=2, mag=1, duration=.065, c=8 },
  { ico=33, name="roll", dmg=75, spalsh=25, size=4, mag=2, duration=.075, c=10},
  { ico=34, name="bomb", dmg=50, spalsh=25, size=15, mag=3.5, duration=.3, c=14 },
  { ico=53, name="leap", dmg=50, spalsh=25, size=4, mag=2, duration=.075, c=11 },
@@ -566,11 +566,6 @@ function drawgame()
  end
  drawblooms()
  drawui()
- if(stat(34)==1) then
-  addbloom(1, mx, my, 20, 0)
- end
- if(stat(34)==2) addbloom(2,mx,my, 3,0)
- if(stat(34)==4) addbloom(2,mx,my, 2,0)
 end
 
 function drawui()
