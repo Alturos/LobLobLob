@@ -561,8 +561,8 @@ function drawgame()
  end
  drawmap()
  for b in all(bullets) do
-  pset(b.px, b.py,6)
-  pset(b.x,b.y,b.c)--bulletfade[b.idx])
+  pset(flr(b.px), flr(b.py),6)
+  pset(flr(b.x),flr(b.y),b.c)--bulletfade[b.idx])
  end
  drawblooms()
  drawui()
