@@ -634,7 +634,10 @@ end
 function drawmap()
  for x=1, #heightmap do
   rectfill(x-1, heightmap[x], x-1, 128, 4)
-  if(heightmap[x] <= grassmap[x]) rectfill(x-1, heightmap[x], x-1, grassmap[x], 9)
+  --fillp(0b1111000011110000)
+  fillp(0b1010010110100101)
+  if(heightmap[x] <= grassmap[x]) rectfill(x-1, heightmap[x], x-1, grassmap[x], 0xab)
+  fillp()
  end
 end
 
