@@ -220,9 +220,9 @@ function updatebullets()
 
   if(itm.name == "mirv" and b.vely >= 0 and lvy < 0) then
    b.split = true
-   local b1 = addbullet(b.x,b.y,b.velx * 1.5, b.vely, b.id, b.col)
+   local b1 = addbullet(b.x,b.y,b.velx * 1.5, b.vely, b.id, b.c)
    b1.split = true
-   local b2 = addbullet(b.x,b.y,b.velx * .5, b.vely, b.id, b.col)
+   local b2 = addbullet(b.x,b.y,b.velx * .5, b.vely, b.id, b.c)
    b2.split = true
   end
   far_r = max(far_r, b.x)
@@ -276,6 +276,10 @@ function updatebullets()
   end
   if(hit) then
    del(bullets, b)
+   if(itm.name == "leap" and not b.split) then 
+    local b = addbullet(b.x, b.y -6, b.velx, max(2.5,abs(b.vely)) * -1.1, b.id, b.c)
+    b.split = true
+   end
    if(itm.size and not cancel and (b.split or itm.name != "mirv")) then
     addbloom(1, b.x, b.y, itm.size, itm.dmg)
     if(itm.mag and itm.duration) setshake(itm.mag,itm.duration)
