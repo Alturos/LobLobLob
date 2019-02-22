@@ -293,7 +293,7 @@ function updateblooms(firing)
   if(bl.time == 25) then
    if(ct.tpbls == bl) then
     local dest = mid(6, (flr(rnd(fieldwidth)) + 1) * 2 % fieldwidth, fieldwidth-6)
-    ct.tpblt = addbloom(3, dest, heightmap[dest]-4,5,0)
+    ct.tpblt = addbloom(3, dest, heightmap[dest]-4,6,0)
     ct.tpblt.focus = true
     ct.x = -9
     ct.tpbls = nil
@@ -369,8 +369,7 @@ function updatemove()
  camtarget = ct
  local tx, cx, cy = 0, flr(ct.x), flr(ct.y)
  local floor = cy + 8
- ct.grade_l=0
- ct.grade_r=0
+
  if (btn(1) and cx+8 < fieldwidth) then
   tx += tankspeed * step
   sfx(13,3)
@@ -386,9 +385,7 @@ function updatemove()
  else
   sfx(-2,3)
  end
- local center,r,l = heightmap[flr(ct.x)+5],heightmap[flr(ct.x)+6],heightmap[flr(ct.x)+4]
- ct.grade_l = center-l
- ct.grade_r = center-r
+ calculate_grade(ct)
  ct.y = center-8
  ct.x = mid(0, fieldwidth, ct.x + tx)
  if(flr(ct.x) != cx) ct.tracktgl = not ct.tracktgl
@@ -445,6 +442,7 @@ function updatedeath()
    t.y += gravity * step
    falling =true
   elseif(flr(t.y) + 8 != fl) then t.y = fl + 8 end
+  calculate_grade(t)
  end
 
  if(falling) return
@@ -754,10 +752,16 @@ function useitem()
  elseif(itm.name == "araid") then used = true
  elseif(itm.name == "warp") then
   used = true
-  ct.tpbls = addbloom(3, ct.x+4, ct.y+4, 5, 0)
+  ct.tpbls = addbloom(3, ct.x+4, ct.y+4, 6, 0)
  end
  if(used) return st
  return aim
+end
+
+function calculate_grade(t)
+ local center,r,l = heightmap[flr(t.x)+5],heightmap[flr(t.x)+6],heightmap[flr(t.x)+4]
+ t.grade_l = center-l
+ t.grade_r = center-r
 end
 
 function v_len(x, y)
