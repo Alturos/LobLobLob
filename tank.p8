@@ -47,7 +47,8 @@ text="in the year 30xd, there were... a bunch of tanks... that started... fighti
 startcolours = { 7, 7, 7, 6, 13, 6}
 bloomtypes={
     0x028e, --red
-    0x289a --yellow/orange
+    0x289a, --yellow/orange
+    0x7c7c -- blue
 }
 items={
  { ico=32, name="shell", dmg=50, spalsh=25, size=2, mag=1, duration=.065, c=8 },
@@ -148,7 +149,7 @@ function initmap()
 end
 
 function addbloom(type, x, y, size, dmg)
- add(blooms, {
+ return add(blooms, {
      type=type,
      x=x,
      y=y,
@@ -287,9 +288,20 @@ end
 function updateblooms(firing)
  for i=#blooms,1,-1 do
   local bl = blooms[i]
-  camtarget = bl
+  if(bl.focus) camtarget = bl
   if(bl.time < 21 or not firing) bl.time += 1
   if(bl.time == 25) then
+   if(ct.tpbls == bl) then
+    local dest = mid(6, (flr(rnd(fieldwidth)) + 1) * 2 % fieldwidth, fieldwidth-6)
+    ct.tpblt = addbloom(3, dest, heightmap[dest]-4,5,0)
+    ct.tpblt.focus = true
+    ct.x = -9
+    ct.tpbls = nil
+   elseif(ct.tpblt == bl) then
+    ct.x = bl.x -4
+    ct.y = bl.y -4
+    ct.tpblt = nil
+   end
    -- do all the damage calculations once we hit full size.
    local sz=bl.size
    local cx,cy = flr(bl.x),flr(bl.y)
@@ -330,6 +342,8 @@ function updateblooms(firing)
   end
   if(bl.time > 80) del(blooms, bl)
  end
+ if(ct.tpblt) camtarget = ct.tpblt
+ if(not camtarget and #blooms > 0) camtarget = blooms[#blooms]
 end
 
 function updatemovecam()
@@ -531,7 +545,6 @@ function _draw()
   local idx = mid(0, flr(statetime / 8), 7)
   fadepalette(idx, 1)
  end
- print(stat(1),1,123,7)
 end
 
 function drawgame()
@@ -579,7 +592,7 @@ function drawgame()
   if(t.deflector and t.shp > 0) circ(t.x+4,t.y+4,defl_r,sget(128-t.shp,0)) circ(t.x+4,t.y+4,defl_r-1,sget(125,0))
   if(t == ct) then
    if(state < firing) spr(20, t.x-1, t.y-11)
-   if(state == aim) spr(55, t.x + 4 + (8 * t.ax), t.y + 1 + (8 * t.ay))
+   if(state == aim) circ(t.x + 4 + (8 * t.ax), t.y + 1 + (8 * t.ay), 1, 10)
   end
  end
  drawmap()
@@ -628,6 +641,7 @@ function drawui()
   local x=128/2 -width/2
   rect(x-1,18,x+width+1,26,7)
   rectfill(x,19,x+width,25,0)
+  if(cl< 3) rectfill(x,19,x+width,25,5)
   print(msg, x+3,20,cl)
  end
  if(show_itemselect) drawselectitem()
@@ -736,7 +750,12 @@ function useitem()
  if(itm.name == "chute") then ct.chute = not ct.chute used = true
  elseif(itm.name == "shld") then ct.shp = 8 ct.shield = true ct.deflector = false used = true
  elseif(itm.name == "defl") then ct.shp = 4 ct.deflector = true ct.shield = false used = true
- elseif(itm.name == "fuel") then  used = true st = move end
+ elseif(itm.name == "fuel") then  used = true st = move
+ elseif(itm.name == "araid") then used = true
+ elseif(itm.name == "warp") then
+  used = true
+  ct.tpbls = addbloom(3, ct.x+4, ct.y+4, 5, 0)
+ end
  if(used) return st
  return aim
 end
