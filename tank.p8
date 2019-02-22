@@ -371,7 +371,7 @@ end
 function updatemove()
  message="move"
  camtarget = ct
- local tx, cx, cy = 0, flr(ct.x), flr(ct.y)
+ local tx, cx, cy, center = 0, flr(ct.x), flr(ct.y), heightmap[flr(ct.x)+5]
  local floor = cy + 8
 
  if (btn(1) and cx+8 < fieldwidth) then
@@ -389,9 +389,9 @@ function updatemove()
  else
   sfx(-2,3)
  end
- calculate_grade(ct)
  ct.y = center-8
  ct.x = mid(0, fieldwidth, ct.x + tx)
+ calculate_grade(ct)
  if(flr(ct.x) != cx) ct.tracktgl = not ct.tracktgl
  if(btnp(4) or btnp(5)) nextstate = firing
 end
@@ -441,11 +441,11 @@ function updatedeath()
  local falling,dying = false,false
  for i=#tanks, 1, -1 do
   local t=tanks[i]
-  local fl=heightmap[flr(t.x)+1]
+  local fl=heightmap[flr(t.x)+5]
   if(flr(t.y) + 8 < fl) then
    t.y += gravity * step
    falling =true
-  elseif(flr(t.y) + 8 != fl) then t.y = fl + 8 end
+  elseif(flr(t.y) + 8 != fl) then t.y = fl - 8 end
   calculate_grade(t)
  end
 
