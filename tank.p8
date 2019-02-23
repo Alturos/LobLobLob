@@ -51,18 +51,18 @@ bloomtypes={
     0x7c7c -- blue
 }
 items={
- { ico=32, name="shell", dmg=50, spalsh=25, size=2, mag=1, duration=.065, c=8 },
- { ico=33, name="roll", dmg=75, spalsh=25, size=4, mag=2, duration=.075, c=10},
- { ico=34, name="bomb", dmg=50, spalsh=25, size=15, mag=3.5, duration=.3, c=14 },
- { ico=53, name="leap", dmg=50, spalsh=25, size=4, mag=2, duration=.075, c=11 },
- { ico=49, name="nplm", dmg=0, spalsh=25, c=9 },
- { ico=50, name="mirv", dmg=25, spalsh=50, size=8, mag=2, duration=.095, c=15 },
- { ico=40, name="araid", dmg=0, splash=75, size=10, mag=3, duration=.095, c=7},
- { ico=35, name="shld" },
- { ico=48, name="defl" },
- { ico=51, name="chute"},
- { ico=52, name="fuel" },
- { ico=18, name="warp" }
+ { ico=32, name="shell", dmg=50, spalsh=25, size=2, mag=1, duration=.065, c=8, stock = -1 },
+ { ico=33, name="roll ", dmg=75, spalsh=25, size=6, mag=2, duration=.075, c=10, stock = 2, cost = 100 },
+ { ico=34, name="bomb ", dmg=50, spalsh=25, size=16, mag=3.5, duration=.3, c=14, stock =  4, cost = 500 },
+ { ico=53, name="leap ", dmg=50, spalsh=25, size=6, mag=2, duration=.075, c=11, stock = 4, cost = 100 },
+ { ico=49, name="nplm ", dmg=0, spalsh=25, c=9, cost = 250 },
+ { ico=50, name="mirv ", dmg=25, spalsh=50, size=8, mag=2, duration=.095, c=15, cost = 750},
+ { ico=40, name="araid", dmg=0, splash=75, size=10, mag=3, duration=.095, c=7, cost = 2000},
+ { ico=35, name="shld ", stock = 1, cost = 250 },
+ { ico=48, name="defl ", cost = 500 },
+ { ico=51, name="chute", stock = 1, cost = 50},
+ { ico=52, name="fuel ", stock = 4, cost = 50 },
+ { ico=18, name="warp ", stock = 2 , cost = 300 }
 }
 teams={
     {c=nil, name="red"},
@@ -115,7 +115,7 @@ function add_tank(team,x)
   angle=45,
   power=50,
   frame=0,
-  item=9,
+  item=1,
   ox=4,
   oy=4,
   shp=0,
@@ -128,8 +128,15 @@ function add_tank(team,x)
   shield=false,
   deflector=false,
   tracktgl=false,
-  deathclock=0
+  deathclock=0,
+  k=0,
+  d=0,
+  cash=0,
+  stock={}
  }
+ for i=1, #items, 1 do
+  add(t.stock, items[i].stock or 0)
+ end
  for i=1, 8, 1 do
   heightmap[t.x+i] = t.y+8
   grassmap[t.x+i] = heightmap[t.x+i] + 3
@@ -263,6 +270,7 @@ function updatebullets()
     if((ct != t or b.life > 10) and (dist <= 1 or (b.x >= t.x and b.x < (t.x + 7) and b.y > (t.y + 3) and b.y < (t.y + 8)))) then
      -- hit tank, explode
      t.health -= itm.dmg
+     if(t != ct) ct.cash += itm.dmg * 10
      hit = true
     end
    end
@@ -341,6 +349,7 @@ function updateblooms(firing)
      if(t.deflector and t.shp > 0) dmg *=.75 t.shp -= 1
      -- round up the damage to whole numbers.
      t.health -= ceil(dmg)
+     if(t != ct) ct.cash += ceil(dmg) * 100
     end
    end
   end
@@ -454,11 +463,15 @@ function updatedeath()
  for i=#tanks, 1, -1 do
   local t=tanks[i]
   if(t.health <= 0) t.deathclock += 1 dying = true cam.x = mid(0, fieldwidth-128, t.x-60)
-  if(t.deathclock == 1) setshake(5, .3)
+  if(t.deathclock == 1) then 
+   setshake(5, .3)
+   t.d += 1
+   if(t != ct) ct.k += 1 ct.cash += 500
+  end
   if(t.deathclock > 51) dying = false
  end
 
-if(dying) return
+ if(dying) return
 
  statetime -= 1
  if(statetime == 90) then
@@ -479,7 +492,6 @@ function updatetitle()
  if(titlefade) then
   statetime += 1
   if(statetime >= 72) then
-   titlefade = false
    nextstate = pregame
    statetime = 72
    initgame()
@@ -513,6 +525,7 @@ function updatepregame()
  statetime -= 1
  if(statetime < -32) then
   statetime = 0
+  titlefade = false
   nextstate = movecam
  end
 end
@@ -646,7 +659,7 @@ function drawui()
   if(cl< 3) rectfill(x,19,x+width,25,5)
   print(msg, x+3,20,cl)
  end
- if(show_itemselect) drawselectitem()
+ if(show_itemselect) drawshop()
  --print("[" .. cam.x .. "," .. cam.y .. "]",2,122,7)
 end
 
@@ -664,18 +677,40 @@ function drawselectitem()
     rect(32,32,96,88,7)
     rectfill(33,33,95,87,0)
     local y=34 x=34
-    for itm in all(items) do
-     local selected = itm == items[ct.item]
-     local shopselect = itm == items[shopitem]
-     if(shopselect) then palt(12,true)
-     elseif(selected) then pal(12,11) end
+    for i=1, #items, 1 do
+     local itm = items[i]
+     local selected,shopselect,hasitem,tc = itm == items[ct.item], itm == items[shopitem], ct.stock[i] > 0 or ct.stock[i] == -1, 7
+     if(not hasitem) then pal(12, 5) tc = 5
+     elseif(shopselect) then palt(12,true) tc = 10
+     elseif(selected) then pal(12,11) tc = 11 end
      spr(itm.ico, x, y)
      palt(12,false)
      pal(12,12)
-     print(itm.name, x+10, y+2, 7)
+     print(itm.name, x+10, y+2, tc)
      if(shopselect) spr(54, x, y)
      y += 9
      if(y >= 87) y=34 x=65
+    end
+end
+
+function drawshop()
+    rect(0,18,127,127,7)
+    rectfill(1,19,126,126,0)
+    local y=36 x=10
+    for i=1, #items, 1 do
+     local itm = items[i]
+     local selected,shopselect,hasitem,tc = itm == items[ct.item], itm == items[shopitem], ct.stock[i] > 0 or ct.stock[i] == -1, 7
+     if(not hasitem) then pal(12, 5) tc = 5
+     elseif(shopselect) then palt(12,true) tc = 10
+     elseif(selected) then pal(12,11) tc = 11 end
+     print("0".. ct.stock[i], x-8,y+2,6)
+     spr(itm.ico, x, y)
+     palt(12,false)
+     pal(12,12)
+     print(itm.name .. ":$" .. (itm.cost or 0), x+10, y+2, tc)
+     if(shopselect) spr(54, x, y)
+     y += 12
+     if(y >= 106) y=36 x=70
     end
 end
 
