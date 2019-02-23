@@ -18,6 +18,7 @@ maxslope=3
 minstart=68
 maxstart=92
 heightmap={}
+rockmap={}
 grassmap={}
 fallingdirt={}
 cam={x=0,y=0}
@@ -50,8 +51,15 @@ bloomtypes={
     0x289a, --yellow/orange
     0x7c7c -- blue
 }
+rocktypes={
+    {x=56,y=24},
+    {x=60,y=24},
+    {x=56,y=28},
+    {x=60,y=28}
+}
+
 items={
- { ico=32, name="shell", dmg=50, spalsh=25, size=2, mag=1, duration=.065, c=8, stock = -1 },
+ { ico=32, name="shell", dmg=50, spalsh=25, size=2, mag=1, duration=.065, c=8, stock = -1, cost = 0},
  { ico=33, name="roll ", dmg=75, spalsh=25, size=6, mag=2, duration=.075, c=10, stock = 2, cost = 100 },
  { ico=34, name="bomb ", dmg=50, spalsh=25, size=16, mag=3.5, duration=.3, c=14, stock =  4, cost = 500 },
  { ico=53, name="leap ", dmg=50, spalsh=25, size=6, mag=2, duration=.075, c=11, stock = 4, cost = 100 },
@@ -88,53 +96,63 @@ function _init()
  poke(0x5f2d, 1)
  music(0)
  state=title
+
+end
+
+function resetround()
+ mapseed=rndi(12)
+ bullets={}
+ blooms={}
+ initmap()
+ for i=1,#tanks,1 do
+  local t,x = tanks[i],(fieldwidth-24)/players*i
+  t.deathclock = 0
+  t.deflector = false
+  t.shield = false
+  t.chute = false
+  t.shp = 0
+  t.health = 100
+  t.grade_r=0,
+  t.grade_l=0,
+  t.x=x,
+  t.y=heightmap[x]-7,
+ end
 end
 
 function initgame()
  colourlist={1,2,3,4,5,6,7,8,9,10}
  tanks={}
- bullets={}
- blooms={}
- initmap()
  --here we add tanks based on game mode
  for i=1,players,1 do
-  local team = colourlist[flr(rnd(#colourlist)+1)]
+  local team = colourlist[rndi(#colourlist)+1]
   del(colourlist, team)
-  add_tank(team,(fieldwidth-24)/players*i) -- team
+  add_tank(team) -- team
  end
+ resetround()
 end
 
-function add_tank(team,x)
+function add_tank(team)
  if(team == nil) team = 0
  local t={
   sprite=1,
   team=team,
-  x=x,
-  y=heightmap[x]-7,
-  health=100,
+  
   angle=45,
   power=50,
   frame=0,
   item=1,
   ox=4,
   oy=4,
-  shp=0,
-  grade_r=0,
-  grade_l=0,
   ax=cos(45/360),
   ay=sin(45/360),
   cpu=false,
-  chute=false,
-  shield=false,
-  deflector=false,
   tracktgl=false,
-  deathclock=0,
   k=0,
   d=0,
-  cash=0,
+  cash=1000,
   stock={}
  }
- for i=1, #items, 1 do
+  for i=1, #items, 1 do
   add(t.stock, items[i].stock or 0)
  end
  for i=1, 8, 1 do
@@ -146,11 +164,19 @@ end
 
 function initmap()
  local x = 0
- local y = flr(rnd(maxstart-minstart)) + minstart
+ local y = rndi(maxstart-minstart) + minstart
+ local rocks = 1
  for x=1,fieldwidth do
   add(heightmap, y)
   add(grassmap, y+3)
-  local slope = flr(rnd(maxslope*2+1))-maxslope
+  --create rock table for each column
+  local rocks = rnd(2)
+  while rocks>1 do
+   local rock={x=x, y=rndi(128-y)+y, type = rndi(4)+1, flx = rndi(2) == 1, fly = rndi(2) == 1, c = rndi(4)}
+   add(rockmap, rock)
+   rocks -= 1
+  end
+  local slope = rndi(maxslope*2+1)-maxslope
   y = max(4, y-slope)
  end
 end
@@ -190,6 +216,8 @@ function _update60()
  ct = tanks[activetank]
  if(state == pregame) then
   updatepregame()
+ elseif(state == postgame) then
+  updatepostgame()
  elseif(state == aim) then
   updateaim()
  elseif(state == move) then
@@ -304,7 +332,7 @@ function updateblooms(firing)
   if(bl.time < 21 or not firing) bl.time += 1
   if(bl.time == 25) then
    if(ct.tpbls == bl) then
-    local dest = mid(6, (flr(rnd(fieldwidth)) + 1) * 2 % fieldwidth, fieldwidth-6)
+    local dest = mid(6, (rndi(fieldwidth) + 1) * 2 % fieldwidth, fieldwidth-6)
     ct.tpblt = addbloom(3, dest, heightmap[dest]-4,6,0)
     ct.tpblt.focus = true
     ct.x = -9
@@ -445,6 +473,7 @@ function updatedeath()
  camtarget = nil
  updatebullets()
  updateblooms(false)
+ local deadcount = 0
  -- finish explosions before doing anything else.
  if(#blooms > 0) return
  local falling,dying = false,false
@@ -462,7 +491,7 @@ function updatedeath()
 
  for i=#tanks, 1, -1 do
   local t=tanks[i]
-  if(t.health <= 0) t.deathclock += 1 dying = true cam.x = mid(0, fieldwidth-128, t.x-60)
+  if(t.health <= 0) t.deathclock += 1 dying = true cam.x = mid(0, fieldwidth-128, t.x-60) deadcount += 1
   if(t.deathclock == 1) then 
    setshake(5, .3)
    t.d += 1
@@ -473,16 +502,18 @@ function updatedeath()
 
  if(dying) return
 
- statetime -= 1
+
  if(statetime == 90) then
   picknexttank()
  end
+ if(deadcount >= #tanks-1) then
+  nextstate = postgame 
+  statetime = 1 
+  return
+ end
+ statetime -= 1
  if(statetime <= 90) camtarget = ct
  if(statetime <= 0) nextstate = movecam
-end
-
-function updateshop()
-  camtarget = nil
 end
 
 function updatetitle()
@@ -503,16 +534,48 @@ function updatetitle()
  end
 end
 
-function updateselect()
+function updateitemmenu()
  camtarget = nil
- show_itemselect=true
- message="select item"
- if (btnp(1)) shopitem = min(#items, shopitem + 6) sfx(9)
- if (btnp(0)) shopitem -= 6 sfx(9)
+ if (btnp(1) or btnp(0)) then 
+  if(shopitem < 7) then shopitem += 6
+  else shopitem -= 6 end
+  sfx(9)
+ end
  if (btnp(2)) shopitem -= 1 sfx(9)
  if (btnp(3)) shopitem += 1 sfx(9)
- if(shopitem<1) shopitem = #items
+ if(shopitem < 1) shopitem = #items
  if(shopitem>#items) shopitem = 1
+end
+
+function updateshop()
+  message="shop $" .. ct.cash --"select item"
+  if(titlefade) then
+   statetime += 1
+   if(statetime > 72) statetime = 72 nextstate = pregame resetround() titlefade = false
+  end
+  updateitemmenu()
+  if(btnp(5)) then
+    -- purchase
+    itm = items[shopitem]
+    if(itm.cost < 1 or itm.cost > ct.cash or ct.stock[shopitem] > 98) then sfx(11)
+    else 
+     ct.cache -= itm.cost
+     ct.stock[shopitem] += 1
+     sfx(10)
+    end 
+  end
+  if(btnp(4)) then
+   -- next
+   if(activetank < #tanks) then activetank += 1
+   else titlefade = true statetime = 0 end
+   sfx(10)
+ end
+end
+
+function updateselect()
+ show_itemselect=true
+ message="shop $" .. ct.cash --"select item"
+ updateitemmenu()
  if(btnp(4)) nextstate = movecam  sfx(11)
  if(btnp(5)) then
   sfx(10)
@@ -527,6 +590,14 @@ function updatepregame()
   statetime = 0
   titlefade = false
   nextstate = movecam
+ end
+end
+
+function updatepostgame()
+ statetime += 1
+ if(statetime > 72) then 
+  statetime = 72
+  if(btnp(5) or btnp(5)) nextstate = shop activetank = 1
  end
 end
 
@@ -559,6 +630,17 @@ function _draw()
  if(state == pregame or state == postgame or titlefade) then
   local idx = mid(0, flr(statetime / 8), 7)
   fadepalette(idx, 1)
+ end
+ if(state == postgame and statetime >= 72) then
+  pal()
+  rect(0,0,127,127,7)
+  rectfill(1,1,126,126,0)
+  for i=1,#tanks,1 do
+   local t = tanks[i]
+   local name,y = teams[t.team].name,16 + i*10
+   print(name, 16 + (3-#name)*4, y, 7)
+   print( "  k:" .. t.k .. " d:" .. t.d .. "  $" .. t.cash, 24, y, 7)
+  end
  end
 end
 
@@ -649,7 +731,8 @@ function drawui()
  -- angle
  print("angle:" .. t.angle,66,11,7)
 
-
+ if(show_itemselect) drawselectitem()
+ if(state == shop) drawshop()
  if(message != nil) then
   local msg = teams[ct.team].name .. ": " .. message
   local width,cl=(#msg*4)+5,shr(band(teams[ct.team].c or 0x800,0xf00),8) or 8
@@ -659,8 +742,6 @@ function drawui()
   if(cl< 3) rectfill(x,19,x+width,25,5)
   print(msg, x+3,20,cl)
  end
- if(show_itemselect) drawshop()
- --print("[" .. cam.x .. "," .. cam.y .. "]",2,122,7)
 end
 
 function drawmap()
@@ -670,6 +751,12 @@ function drawmap()
   fillp(0b1010010110100101)
   if(grassmap[x] and heightmap[x] <= grassmap[x]) rectfill(x-1, heightmap[x], x-1, grassmap[x], 0xab)
   fillp()
+ end
+ for rock in all(rockmap) do --pull in rock table and draw each rock
+  if(rock.y > heightmap[rock.x]) then
+   rt = rocktypes[rock.type]
+   sspr(rt.x, rt.y, 4, 4, rock.x, rock.y, 4, 4)--, rock.flx, rock.fly)
+  end
  end
 end
 
@@ -700,14 +787,19 @@ function drawshop()
     for i=1, #items, 1 do
      local itm = items[i]
      local selected,shopselect,hasitem,tc = itm == items[ct.item], itm == items[shopitem], ct.stock[i] > 0 or ct.stock[i] == -1, 7
-     if(not hasitem) then pal(12, 5) tc = 5
-     elseif(shopselect) then palt(12,true) tc = 10
-     elseif(selected) then pal(12,11) tc = 11 end
-     print("0".. ct.stock[i], x-8,y+2,6)
+     if(itm.cost < 1 or itm.cost > ct.cash) then pal(12, 5) tc = 5
+     elseif(shopselect) then palt(12,true) tc = 10 end
+     local stock = ct.stock[i]
+     if(stock == -1) stock = 99
+     if(stock < 9) stock = "0" .. stock
+     local price
+     if((itm.cost) < 1) then price = ":free"
+     else price = ":$" .. itm.cost end
+     print(stock, x-8,y+2,6)
      spr(itm.ico, x, y)
      palt(12,false)
      pal(12,12)
-     print(itm.name .. ":$" .. (itm.cost or 0), x+10, y+2, tc)
+     print(itm.name .. price, x+10, y+2, tc)
      if(shopselect) spr(54, x, y)
      y += 12
      if(y >= 106) y=36 x=70
@@ -879,6 +971,10 @@ function lerp(v0, v1, t)
   return (1 - t) * v0 + t * v1;
 end
 
+function rndi(max)
+ return flr(rnd(max))
+end
+
 function fadepalette(idx, fullscreen)
 	pal(1, sget(120 + idx, 1), fullscreen)
 	pal(2, sget(120 + idx, 2), fullscreen)
@@ -921,14 +1017,14 @@ c656688cc568975cc656688ec9d66d9c025393939d33d22222d3333332220000cc68cccc88a99e8e
 c656681cc156651cc6566888c196691c56d22223333364444663332220000000cc11cccc28298a82289aa2820000d00000000000088800a0009008805db5bbd5
 c11111cccc1551ccc1166881cc1991cc00000002222251111152225000000000cccc68ccd22a2225da2922a500d00500a0d0d5d0008800000000000005050050
 ccccccccccc11cccccc1111cccc11ccc00000000000050000050550000000000cccc11cc05d5d5d005d5d5d0000d005005005d000d500050005dd05d05050050
-cccc8ccccccccccccccccccccce7e7cccccccccccccccccc0a9009a00a0000000003d000004004000000000000000000000000000000000000000000005dd500
-cccc7ccc9cac9cccc8eccccccee66e7ccefd35cccccccccca000000aa0a000005d0d300005404500000000000000000000000000000000000000000096969454
-cddc6ccc191ca9ccc8866cccee666ee7c11f115c66ccc82c900000090a00000053033000045040400000000000000000000155000000000000000000979794d4
+cccc8ccccccccccccccccccccce7e7cccccccccccccccccc0a9009a0550005500003d000004004000000000000000000000000000000000000000000005dd500
+cccc7ccc9cac9cccc8eccccccee66e7ccefd35cccccccccca000000a555055005d0d300005404500000000000000000000000000000000000000000096969454
+cddc6ccc191ca9ccc8866cccee666ee7c11f115c66ccc82c900000090550500053033000045040400000000000000000000155000000000000000000979794d4
 ceed666cc198fa9cc116c78c61117116cc33335ccc6c788c000000000000000053d3d0d50545454405565000000000000005d600000000000000000099999454
-c22edcccc9f99a9ccc6c7c1c16cc7c61cc33535cccc7c11c000000000000000005333035445454005d666500044449f000015500000000505050505000000000
-cd22edccc19f891cccc7c8cccc6996cccc35335cccc7cccc9000000900000000000d3d35005450006ddd665005554f9001551550000506d6d6d6d6d600000000
-c352edcccc1991ccccc8c1ccccc11ccccc33335ccccccccca000000a000000000003335000054000d5d6dd65444f94f905d65d60006d505d505d505d00000000
-c11111ccccc11cccccc1cccccccccccccc11111ccccccccc0a9009a00000000000033000005544005d5dd55d5449f59f01551550d500d50d050d050d00000000
+c22edcccc9f99a9ccc6c7c1c16cc7c61cc33535cccc7c11c000000000550005005333035445454005d666500044449f000015500000000505050505000000000
+cd22edccc19f891cccc7c8cccc6996cccc35335cccc7cccc9000000900000550000d3d35005450006ddd665005554f9001551550000506d6d6d6d6d600000000
+c352edcccc1991ccccc8c1ccccc11ccccc33335ccccccccca000000a055005000003335000054000d5d6dd65444f94f905d65d60006d505d505d505d00000000
+c11111ccccc11cccccc1cccccccccccccc11111ccccccccc0a9009a05555000500033000005544005d5dd55d5449f59f01551550d500d50d050d050d00000000
 cccccccc00000000000000000000000000000000cccccccc0000000aa7710000000000449aa771000000000aaaa771000000000aa7710000ccccccc8cccccccc
 cccccccc00000000000000000000000000000000cccccccc0000009aaa7200000000049aaaaaa7100000009aaaaaa7100000009aaa720000ccccccc98ccccccc
 cccccccc00000000000000000000016100000000cccccccc000000aaf6a2000000004aaffffffaa1000000aaaaaffa20000000aaf6a20000ccccccfa9fcccccc
@@ -1267,3 +1363,4 @@ __music__
 00 41424344
 00 41424344
 00 0f101100
+
