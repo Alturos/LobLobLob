@@ -8,19 +8,15 @@ __lua__
 -- engine sound plays forever when moving at end of turn
 -- camera doesn't track to next player after death
 
-title, pregame, aim, move, shop, movecam, select, firing, death, postgame = 0, 1, 2, 4, 8, 16, 32, 64, 128, 256
-state = title
-nextstate = title
+title, pregame, aim, move, shop, movecam, select, firing, death, postgame, logo = 0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512
+state = logo
+nextstate = logo
 statetime=0
 fieldwidth=256
 gravity=30
 maxslope=3
 minstart=68
 maxstart=92
-heightmap={}
-rockmap={}
-grassmap={}
-fallingdirt={}
 cam={x=0,y=0}
 camtarget=nil
 camspeed=90
@@ -28,6 +24,7 @@ anglespeed=0
 pspeed=0
 tankspeed=10
 players=4
+logotimer=0
 titlefade = false
 activetank=1 -- this will change to active tank/player
 step=1/60
@@ -73,17 +70,17 @@ items={
  { ico=18, name="warp ", stock = 2 , cost = 300 }
 }
 teams={
-    {c=nil, name="red"},
-    {c=0xc61, name="skye"}, -- light blue
-    --{c=0x3b1, name="hunter"}, -- dark green
-    {c=0x150, name="royal"},
-    {c=0x051, name="void"},
-    {c=0x9a4, name="oj"}, -- orange
-    {c=0x4f2, name="mud"}, -- brown
-    {c=0xb63, name="forest"}, -- light green
-    {c=0xf64, name="coach"}, -- tan
-    {c=0xaf9, name="sunny"},-- yellow
-    {c=0x671, name="gary"}  -- light grey
+  {c=nil, name="red"},
+  {c=0xc61, name="skye"}, -- light blue
+  {c=0x3b1, name="hunter"}, -- dark green
+  {c=0x150, name="royal"},
+  {c=0x051, name="void"},
+  {c=0x9a4, name="oj"}, -- orange
+  {c=0x4f2, name="mud"}, -- brown
+  {c=0xb63, name="forest"}, -- light green
+  {c=0xf64, name="coach"}, -- tan
+  {c=0xaf9, name="sunny"},-- yellow
+  {c=0x671, name="gary"}  -- light grey
 }
 bulletfade={10,10,10,10,10,10,9,9,9,15,15,8,8}
 shopitem=1
@@ -94,9 +91,6 @@ message=nil
 function _init()
  cls()
  poke(0x5f2d, 1)
- music(0)
- state=title
- 
 end
 
 function resetround()
@@ -124,7 +118,7 @@ function resetround()
 end
 
 function initgame()
- colourlist={1,2,3,4,5,6,7,8,9,10}
+ colourlist={1,2,3,4,5,6,7,8,9,10,11}
  tanks={}
  --here we add tanks based on game mode
  for i=1,players,1 do
@@ -140,7 +134,6 @@ function add_tank(team)
  local t={
   sprite=1,
   team=team,
-  
   angle=45,
   power=50,
   frame=0,
@@ -163,6 +156,10 @@ function add_tank(team)
 end
 
 function initmap()
+ heightmap={}
+ rockmap={}
+ grassmap={}
+ fallingdirt={}
  local x = 0
  local y = rndi(maxstart-minstart) + minstart
  local rocks = 1
@@ -177,7 +174,7 @@ function initmap()
    rocks -= 1
   end
   local slope = rndi(maxslope*2+1)-maxslope
-  y = max(4, y-slope)
+  y = mid(4, y-slope, 127)
  end
 end
 
@@ -211,6 +208,7 @@ function _update60()
  if(state == title) then
   updatetitle()
   return
+ elseif(state==logo) then return
  end
 
  ct = tanks[activetank]
@@ -253,7 +251,7 @@ function updatebullets()
   b.idx += 1
   if(b.idx > #bulletfade) b.idx = 1
 
-  if(itm.name == "mirv" and b.vely >= 0 and lvy < 0) then
+  if(itm.name == "mirv " and b.vely >= 0 and lvy < 0) then
    b.split = true
    local b1 = addbullet(b.x,b.y,b.velx * 1.5, b.vely, b.id, b.c)
    b1.split = true
@@ -312,11 +310,11 @@ function updatebullets()
   end
   if(hit) then
    del(bullets, b)
-   if(itm.name == "leap" and not b.split) then 
+   if(itm.name == "leap " and not b.split) then 
     local b = addbullet(b.x, b.y -6, b.velx, max(2.5,abs(b.vely)) * -1.1, b.id, b.c)
     b.split = true
    end
-   if(itm.size and not cancel and (b.split or itm.name != "mirv")) then
+   if(itm.size and not cancel and (b.split or itm.name != "mirv ")) then
     addbloom(1, b.x, b.y, itm.size, itm.dmg)
     if(itm.mag and itm.duration) setshake(itm.mag,itm.duration)
    end
@@ -369,7 +367,7 @@ function updateblooms(firing)
    for t in all(tanks) do
     local diff= v_subtr(bl,t)
     local dist= v_len(diff.x, diff.y)
-    if(t.health > 0 and dist <= bl.size) then
+    if(bl.dmg > 0 and t.health > 0 and dist <= bl.size) then
      -- linear interpolate damage over the blast radius
      local dmg = lerp(1, bl.dmg, dist/bl.size)
      -- shields eat half of any remaining damage, deflectors 25%
@@ -464,6 +462,7 @@ function updatefiring()
  updateblooms(true)
  if(#bullets<1) then
   nextstate = death
+  fallscalcd = false
   statetime = 100
  end
 end
@@ -479,39 +478,56 @@ function updatedeath()
  local falling,dying = false,false
  for i=#tanks, 1, -1 do
   local t=tanks[i]
-  local fl=heightmap[flr(t.x)+5]
-  if(flr(t.y) + 8 < fl) then
-   t.y += gravity * step
-   falling =true
-  elseif(flr(t.y) + 8 != fl) then t.y = fl - 8 end
+  local fl,y=heightmap[flr(t.x)+5], flr(t.y) + 8
+  local fdist,h = gravity * step, fl - y
+  if(t.chute) fdist *= .5
+  if(y < fl and h > 1) then
+   if(not fallscalcd and not t.chute) then
+    t.falld = h 
+   end
+   t.y += fdist
+   t.fell = true
+   falling = true
+  elseif(y != fl) then t.y = fl - 8 end
   calculate_grade(t)
  end
-
+ fallscalcd = true
  if(falling) return
-
+ 
  for i=#tanks, 1, -1 do
   local t=tanks[i]
-  if(t.health <= 0) t.deathclock += 1 dying = true cam.x = mid(0, fieldwidth-128, t.x-60) deadcount += 1
+  if(t.falld and t.falld > 0) t.health -= t.falld t.falld = 0
+  if(t.fell) t.fell=false t.chute = false
+
+  if(t.health <= 0) then
+   t.deathclock += 1 
+   dying = true
+   deadcount += 1
+  end
   if(t.deathclock == 1) then 
    setshake(5, .3)
    t.d += 1
+   cam.x = mid(0, fieldwidth-128, t.x-60)
    if(t != ct) ct.k += 1 ct.cash += 500
   end
   if(t.deathclock > 51) dying = false
  end
 
-if(dying) return
+ if(dying) return
 
  if(statetime == 90) then
   picknexttank()
  end
- if(deadcount >= #tanks-1) then
-  nextstate = postgame 
-  statetime = 1 
-  return
- end
+ 
  statetime -= 1
- if(statetime <= 90) camtarget = ct
+ if(statetime <= 90) then
+  camtarget = ct
+  if(deadcount >= #tanks-1) then
+   nextstate = postgame 
+   statetime = 1 
+   return
+  end
+ end
  if(statetime <= 0) nextstate = movecam
 end
 
@@ -558,7 +574,7 @@ function updateshop()
     itm = items[shopitem]
     if(itm.cost < 1 or itm.cost > ct.cash or ct.stock[shopitem] > 98) then sfx(11)
     else 
-     ct.cache -= itm.cost
+     ct.cash -= itm.cost
      ct.stock[shopitem] += 1
      sfx(10)
     end 
@@ -608,7 +624,7 @@ function updatecamera()
  if(camtarget == nil) return
  focus = {x=camtarget.x-60, y=camtarget.y-64}
  camdiff = v_subtr(cam,focus)
- if(flr(v_len(camdiff.x, camdiff.y)) >= 1) then
+ if(flr(v_len(camdiff.x, camdiff.y)+4) >= 1) then
   cam = v_add(v_mult(v_normalized(camdiff), camspeed * step), cam)
   cam.x = mid(cam.x, 0, fieldwidth-128)
   cam.y = mid(cam.y, -128, 0)
@@ -619,7 +635,9 @@ end
 --draw
 function _draw()
  cls()
- if(state==title) then
+ if(state==logo) then
+  drawlogo()
+ elseif(state==title) then
   drawtitle()
   print("press 🅾️ or ❎ to start!", 20, 76, startcolours[titleidx])
  else
@@ -683,7 +701,7 @@ function drawgame()
   elseif(t.deathclock>10) then spr(42,t.x,t.y)
   else spr(41,t.x,t.y) end
   pal()
-
+  if(t.chute and t.fell) palt(12,true) spr(51,t.x,t.y-5) palt()
   if(t.shield and t.shp > 0) circ(t.x+4,t.y+4,shield_r,sget(124-flr(t.shp/2),0)) circ(t.x+4,t.y+4,shield_r-1,sget(121,0))
   if(t.deflector and t.shp > 0) circ(t.x+4,t.y+4,defl_r,sget(128-t.shp,0)) circ(t.x+4,t.y+4,defl_r-1,sget(125,0))
   if(t == ct) then
@@ -746,10 +764,10 @@ end
 function drawmap()
  local dino=0
  for x=1, #heightmap do
-  rectfill(x-1, heightmap[x], x-1, 128, 4)
+  line(x-1, heightmap[x], x-1, 128, 4)
   --fillp(0b1111000011110000)
   fillp(0b1010010110100101)
-  if(grassmap[x] and heightmap[x] <= grassmap[x]) rectfill(x-1, heightmap[x], x-1, grassmap[x], 0xab)
+  if(grassmap[x] and heightmap[x] <= grassmap[x]) line(x-1, heightmap[x], x-1, grassmap[x], 0xab)
   fillp()
  end
  for rock in all(rockmap) do --pull in rock table and draw each rock
@@ -811,6 +829,36 @@ function drawshop()
     end
 end
 
+function drawlogo()
+ local fl = false
+ if(rnd(2)>1) fl = true
+ palt(12,true)
+ palt(0,false)
+ rectfill(0,0,128,128,13)
+ sspr(64,48,64,16,32,68)
+ spr(78,56,48,2,2,fl)
+ print("p r e s e n t s",34,86,0)
+ if logotimer == 0 then
+  logotimer += 1
+  sfx(26) --picocity sound
+ end
+ if(logotimer >= 128) then
+  titlefade = true
+  statetime += 1
+ end
+ if logotimer > 200 or btnp() > 0 then
+  nextstate = title
+  titlefade = false
+  statetime = 0
+  sfx(-1,0)
+  music(0)
+  cls()
+  palt()
+ else
+  logotimer += 1
+ end
+end
+
 function drawtitle()
  rectfill(0,12,128,72,1)
  pal(1,0)
@@ -836,11 +884,13 @@ function drawtitle()
 end
 
 function picknexttank()
- repeat
+ local found = false
+ while(not found) do
   activetank += 1
   if(activetank > #tanks) activetank = 1
-  ct = tanks[activetank]
- until ct.health > 0
+  if(tanks[activetank].health > 0) found = true
+ end
+ ct = tanks[activetank]
 end
 
 function drawsplash()
@@ -882,11 +932,11 @@ end
 function useitem()
  local used,st,itm=false,firing,items[ct.item]
  if(itm.name == "chute") then ct.chute = not ct.chute used = true
- elseif(itm.name == "shld") then ct.shp = 8 ct.shield = true ct.deflector = false used = true
- elseif(itm.name == "defl") then ct.shp = 4 ct.deflector = true ct.shield = false used = true
- elseif(itm.name == "fuel") then  used = true st = move
+ elseif(itm.name == "shld ") then ct.shp = 8 ct.shield = true ct.deflector = false used = true
+ elseif(itm.name == "defl ") then ct.shp = 4 ct.deflector = true ct.shield = false used = true
+ elseif(itm.name == "fuel ") then  used = true st = move
  elseif(itm.name == "araid") then used = true
- elseif(itm.name == "warp") then
+ elseif(itm.name == "warp ") then
   used = true
   ct.tpbls = addbloom(3, ct.x+4, ct.y+4, 6, 0)
  end
@@ -1054,14 +1104,14 @@ cccccccc2224242222888e22d6dd0000000005a0cccccccc00049faf210000000049f6200599f620
 000000056dd6511222ee882252489820cccccccccccccccc90005dd600000000c00cc00cccccccccccccc00ccccc00c00c00cc00cc00cccccccc00c0000c0ccc
 0000000056550011222e998555248a20cccccccccccccccc000009ddfa000000c00000cc0c00c00c0000c00c0c000000c000cc00cc000cc00c000000c00000cc
 000000000000000112229a85fd522200cccccccccccccccc0000999999a00000c0000cc0000c00c00c00000000c0000cc0000c00c0000c0000c0000cc00c00cc
-0d55d005000000001122285d6fd55000cccccccccccccccc00affffffffaff00c00c00cc00cc00c00c00c00c00cc00ccc0000c00c0000000c00c00ccc00c000c
-02d55d6252d626000512255d46f50000cccccccccccccccc55ff9999ddd55af0c00cc00c00cc00c00c00c00c00cc00ccc0000c00c0000c00c00c00ccc00cc00c
-002250d020220260005656d6d4650000ccccccccccccccccddaa99aa55111d5fc00ccc00000cc00c0000000c00c000c0cc000c00c000cc00c00000cc000cc00c
-00002550000000d000056d6d6d500000cccccccccccccccc55444444dd21112dc00ccc00c0ccc0ccc000c0c00ccc000ccc00cc00cc00ccc0000c000cc0cc000c
-055dd62d60066d20000056d6d6500000cccccccccccccccc0dd2222255111115c00cc000ccccccc00c00ccc0ccccc0cc0c0cc0000cc0c0cc00ccc0ccccc000cc
-0222220d25d5d2000000055d55000000cccccccccccccccc0055d5d11ddd5d5dc000000cccccc000000ccccc0cccccccc0cccccccccc0cccccccccccccc00ccc
-0000d5d5022525d60000005550000000cccccccccccccccc0000000000000000000000cccccccc00ccccccccccccccccccccccccccccccccccccccccccc0cccc
-000d52220002d22d0000000000000000cccccccccccccccc000000000000000000cccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0ccc
+0d55d000000000001122285d6fd55000cccccccccccccccc00affffffffaff00c00c00cc00cc00c00c00c00c00cc00ccc0000c00c0000000c00c00ccc00c000c
+06255d6052d626000512255d46f50000cccccccccccccccc55ff9999ddd55af0c00cc00c00cc00c00c00c00c00cc00ccc0000c00c0000c00c00c00ccc00cc00c
+002651d000220260005656d6d4650000ccccccccccccccccddaa99aa55111d5fc00ccc00000cc00c0000000c00c000c0cc000c00c000cc00c00000cc000cc00c
+00022552000000d000056d6d6d500000cccccccccccccccc55444444dd21112dc00ccc00c0ccc0ccc000c0c00ccc000ccc00cc00cc00ccc0000c000cc0cc000c
+06565d2d600d6d20000056d6d6500000cccccccccccccccc0dd2222255111115c00cc000ccccccc00c00ccc0ccccc0cc0c0cc0000cc0c0cc00ccc0ccccc000cc
+0222220d2555d2000000055d55000000cccccccccccccccc0055d5d11ddd5d5dc000000cccccc000000ccccc0cccccccc0cccccccccc0cccccccccccccc00ccc
+0000d5d502d556d60000005550000000cccccccccccccccc0000000000000000000000cccccccc00ccccccccccccccccccccccccccccccccccccccccccc0cccc
+000d52000000d52d0000000000000000cccccccccccccccc000000000000000000cccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0ccc
 00000000000000000000000000000000000000000000000000000000000000000000005444000000000000000000000000000000000000000000000000000000
 00000000000d50000000000000000000000000000000000000000000000000000000544455440000000000000000000000000000000000000000000004450000
 00000000005dd55d00000000000000000000000000000d0000000000000000000000445445540400000000000000000000000000000000000000000004554540
@@ -1306,7 +1356,7 @@ __sfx__
 010818000305000000000000000003050000000305000000000000000003050000000305000000000000000003050000000305000000000500000000050000000000000000000000000000000000000000000000
 010818000505000000000000000005050000000505000000000000000005050000000505000000000000000005050000000505000000000500000005050000000000000000000000000000000000000000000000
 010800002755027550275502755027550275502755027550275502755027550275502b5502b5502b5502b550245502455024550245502b5502b5502b5502b5500000000000000000000000000000000000000000
-010800002d5502d5502d5502d5502d5502d5502d5502d5502d5502d5502d5502d5502d5502d5502d5502d5502d5402d5402d5302d5302d5202d5202d5102d5100000000000000000000000000000000000000000
+01060000215402d5402d5402d5402d5402d5402d5402d5402d5412d5412d5312d5312d5212d5212d5112d51500500005000050000500005000050000500005000050000500005000050000500005000050000500
 01110000009730090000973009003ca1300973000003ca13009730000000973000003ca1300973000003ca13009730090000973009003ca1300973009003ca13009733ca1300973009003ca1300973009003ca13
 01110000050300000000000000000000000000000300000003030000000803000000000000303000000000000503000000000000803000000000000a03000000000000b03000000000000a030080300303000000
 011100003ca13009033ca11009033ca113ca133ca113ca133ca113ca133ca11009033ca113ca133ca113ca113ca11009033ca11009033ca113ca133ca113ca133ca113ca133ca11009033ca113ca13009033ca11
