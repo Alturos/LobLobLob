@@ -54,10 +54,9 @@ rocktypes={
     {x=56,y=28},
     {x=60,y=28}
 }
-
 items={
  { ico=32, name="shell", dmg=50, spalsh=25, size=2, mag=1, duration=.065, c=8, stock = -1, cost = 0},
- { ico=33, name="roll ", dmg=75, spalsh=25, size=6, mag=2, duration=.075, c=10, stock = 2, cost = 100 },
+ { ico=33, name="roll ", dmg=5, spalsh=0, size=0, mag=.1, duration=.01, c=10, stock = 2, cost = 100 },
  { ico=34, name="bomb ", dmg=50, spalsh=25, size=16, mag=3.5, duration=.3, c=14, stock =  4, cost = 500 },
  { ico=53, name="leap ", dmg=50, spalsh=25, size=6, mag=2, duration=.075, c=11, stock = 4, cost = 100 },
  { ico=49, name="nplm ", dmg=0, spalsh=25, c=9, cost = 250 },
@@ -68,6 +67,10 @@ items={
  { ico=51, name="chute", stock = 1, cost = 50},
  { ico=52, name="fuel ", stock = 4, cost = 50 },
  { ico=18, name="warp ", stock = 2 , cost = 300 }
+}
+subitems={
+    {name="roller", dmg=75, splash=25, size=6, mag=2, duration=.075, id=33, offsets={{x=-4,y=-7}} },
+    {name="bomb", dmg=50, splash=75, size=10, mag=3, duration=.095, id=24, offsets={{x=0,y=-4},{x=0,y=-6},{x=-4,y=-7}} }
 }
 teams={
   {c=nil, name="red"},
@@ -196,6 +199,12 @@ function addbullet(x,y,velx,vely,id,col)
  return add(bullets,b)
 end
 
+function addbomb(x,y,velx,vely,flip,id)
+ return add(bullets, {
+     sub=true, id=id, x=x, y=y, velx=velx, vely=vely, flip=flip, frame=0, time=0, roll=id==1, life=0
+ })
+end
+
 -->8
 --update
 function _update60()
@@ -239,17 +248,33 @@ end
 
 function updatebullets()
  for i=#bullets,1,-1 do
-  local b,hit,itm,cancel = bullets[i], false, items[bullets[i].id], false
+  local b,hit,cancel,itm = bullets[i], false, false
+  if(b.sub) itm = subitems[b.id]
+  if(not b.sub) itm = items[b.id]
   camtarget = b
   local lvy = b.vely
-  b.vely += gravity * step
-  b.px = b.x
-  b.py = b.y
+  if(b.roll) then
+   if(b.x < 0) b.x = 0
+   if(b.x > fieldwidth-1) b.x = fieldwidth
+   local bx = flr(b.x)
+   local l,c,r = (heightmap[bx] or 0), heightmap[bx+1], (heightmap[bx+2] or 0)
+   if((c > l and c > r) or abs(b.velx) <= step) then b.velx = 0
+   elseif(c == l and c == r) then b.velx *= .85
+   elseif(l > c) then b.velx = -10
+   elseif(r > c) then b.velx = 10 end
+   
+   if(flr(b.y) < c) then b.vely += gravity * step
+   else b.vely = 0 end
+  else
+   b.vely += gravity * step
+   b.px = b.x
+   b.py = b.y
+  end
   b.x += b.velx * step
   b.y += b.vely * step
   b.life += 1
-  b.idx += 1
-  if(b.idx > #bulletfade) b.idx = 1
+  --b.idx += 1
+  --if(b.idx > #bulletfade) b.idx = 1
 
   if(itm.name == "mirv " and b.vely >= 0 and lvy < 0) then
    b.split = true
@@ -293,7 +318,7 @@ function updatebullets()
      t.shp -= 1
     end
    else
-    if((ct != t or b.life > 10) and (dist <= 1 or (b.x >= t.x and b.x < (t.x + 7) and b.y > (t.y + 3) and b.y < (t.y + 8)))) then
+    if((ct != t or b.life > 10) and (dist <= 2 or (b.x >= t.x and b.x < (t.x + 7) and b.y > (t.y + 3) and b.y < (t.y + 8)))) then
      -- hit tank, explode
      t.health -= itm.dmg
      if(t != ct) ct.cash += itm.dmg * 10
@@ -303,14 +328,18 @@ function updatebullets()
    if(t.shp < 1) t.shield = false t.deflector = false
    if(hit) break
   end
-  if(b.x < 0 or b.x >= fieldwidth
+  if(b.roll) then
+   if(b.velx == 0 and b.vely == 0) hit = true
+  elseif(b.x < 0 or b.x >= fieldwidth
      or b.y >= heightmap[flr(b.x)+1]
      or b.y > 128) then
       hit = true
   end
   if(hit) then
    del(bullets, b)
-   if(itm.name == "leap " and not b.split) then 
+   if(itm.name == "roll ") then
+    addbomb(b.x,b.y,b.velx*.25,0,false,1)
+   elseif(itm.name == "leap " and not b.split) then 
     local b = addbullet(b.x, b.y -6, b.velx, max(2.5,abs(b.vely)) * -1.1, b.id, b.c)
     b.split = true
    end
@@ -583,7 +612,7 @@ function updateshop()
    -- next
    if(activetank < #tanks) then activetank += 1
    else titlefade = true statetime = 0 end
-   sfx(10)
+   sfx(12)
  end
 end
 
@@ -593,9 +622,11 @@ function updateselect()
  updateitemmenu()
  if(btnp(4)) nextstate = movecam  sfx(11)
  if(btnp(5)) then
-  sfx(10)
-  nextstate = movecam
-  ct.item = shopitem
+  if(ct.stock[shopitem] != 0) then
+   sfx(10)
+   nextstate = movecam
+   ct.item = shopitem
+  else sfx(11) end
  end
 end
 
@@ -612,7 +643,7 @@ function updatepostgame()
  statetime += 1
  if(statetime > 72) then 
   statetime = 72
-  if(btnp(5) or btnp(5)) nextstate = shop activetank = 1
+  if(btnp(4) or btnp(5)) nextstate = shop activetank = 1
  end
 end
 
@@ -711,8 +742,15 @@ function drawgame()
  end
  drawmap()
  for b in all(bullets) do
-  pset(flr(b.px), flr(b.py),6)
-  pset(flr(b.x),flr(b.y),b.c)--bulletfade[b.idx])
+  if(b.sub) then
+   local itm=subitems[b.id]
+   local sid,offs = itm.id + b.frame, itm.offsets[b.frame+1] 
+   if(b.id == 1) then circfill(b.x, b.y, 2, 7)
+   else spr(sid, b.x+offs.x, b.y+offs.y, 1, 1, b.flip) end
+  else
+   pset(flr(b.px), flr(b.py),6)
+   pset(flr(b.x),flr(b.y),b.c)--bulletfade[b.idx])
+  end
  end
  drawblooms()
  drawui()
@@ -735,7 +773,10 @@ function drawui()
  local itm = items[t.item]
  print("item:" .. itm.name,66,3,7)
  palt(12,true)
+ if(ct.stock[ct.item] == 0) pal(12,8) palt(12,false)
  spr(itm.ico,106-(5-#itm.name)*4,1)
+ pal(12,12)
+ palt(12,true)
  -- status icons
  if(ct.chute) spr(51,109,10)
  if(ct.shield) spr(35,118,9)
@@ -784,12 +825,15 @@ function drawmap()
 end
 
 function drawselectitem()
-    rect(32,32,96,88,7)
-    rectfill(33,33,95,87,0)
-    local y=34 x=34
+    rect(22,32,106,88,7)
+    rectfill(23,33,105,87,0)
+    local y=34 x=33
     for i=1, #items, 1 do
      local itm = items[i]
-     local selected,shopselect,hasitem,tc = itm == items[ct.item], itm == items[shopitem], ct.stock[i] > 0 or ct.stock[i] == -1, 7
+     local stock = ct.stock[i]
+     local selected,shopselect,hasitem,tc = itm == items[ct.item], itm == items[shopitem], stock > 0 or stock == -1, 7
+     if(stock == -1) stock = 99
+     if(stock < 9) stock = "0" .. stock
      if(not hasitem) then pal(12, 5) tc = 5
      elseif(shopselect) then palt(12,true) tc = 10
      elseif(selected) then pal(12,11) tc = 11 end
@@ -797,9 +841,10 @@ function drawselectitem()
      palt(12,false)
      pal(12,12)
      print(itm.name, x+10, y+2, tc)
+     print(stock, x-9, y+2, tc)
      if(shopselect) spr(54, x, y)
      y += 9
-     if(y >= 87) y=34 x=65
+     if(y >= 87) y=34 x=73
     end
 end
 
@@ -931,6 +976,12 @@ end
 --helpers
 function useitem()
  local used,st,itm=false,firing,items[ct.item]
+ if(ct.stock[ct.item] == 0) then
+  sfx(11)
+  return movecam
+ elseif(ct.stock[ct.item] > 0) then
+  ct.stock[ct.item] -= 1
+ end
  if(itm.name == "chute") then ct.chute = not ct.chute used = true
  elseif(itm.name == "shld ") then ct.shp = 8 ct.shield = true ct.deflector = false used = true
  elseif(itm.name == "defl ") then ct.shp = 4 ct.deflector = true ct.shield = false used = true
