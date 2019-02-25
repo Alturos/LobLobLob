@@ -118,6 +118,7 @@ function resetround()
    grassmap[t.x+i] = heightmap[t.x+i] + 3
   end
  end
+ music(08)
 end
 
 function initgame()
@@ -262,7 +263,7 @@ function updatebullets()
    elseif(c == l and c == r) then b.velx *= .85
    elseif(l > c) then b.velx = -10
    elseif(r > c) then b.velx = 10 end
-   
+
    if(flr(b.y) < c) then b.vely += gravity * step
    else b.vely = 0 end
   else
@@ -339,7 +340,7 @@ function updatebullets()
    del(bullets, b)
    if(itm.name == "roll ") then
     addbomb(b.x,b.y,b.velx*.25,0,false,1)
-   elseif(itm.name == "leap " and not b.split) then 
+   elseif(itm.name == "leap " and not b.split) then
     local b = addbullet(b.x, b.y -6, b.velx, max(2.5,abs(b.vely)) * -1.1, b.id, b.c)
     b.split = true
    end
@@ -512,7 +513,7 @@ function updatedeath()
   if(t.chute) fdist *= .5
   if(y < fl and h > 1) then
    if(not fallscalcd and not t.chute) then
-    t.falld = h 
+    t.falld = h
    end
    t.y += fdist
    t.fell = true
@@ -522,18 +523,18 @@ function updatedeath()
  end
  fallscalcd = true
  if(falling) return
- 
+
  for i=#tanks, 1, -1 do
   local t=tanks[i]
   if(t.falld and t.falld > 0) t.health -= t.falld t.falld = 0
   if(t.fell) t.fell=false t.chute = false
-
+  if(t.y>121) t.health = 0 --tank fell off the map
   if(t.health <= 0) then
-   t.deathclock += 1 
+   t.deathclock += 1
    dying = true
    deadcount += 1
   end
-  if(t.deathclock == 1) then 
+  if(t.deathclock == 1) then
    setshake(5, .3)
    t.d += 1
    cam.x = mid(0, fieldwidth-128, t.x-60)
@@ -547,13 +548,13 @@ function updatedeath()
  if(statetime == 90) then
   picknexttank()
  end
- 
+
  statetime -= 1
  if(statetime <= 90) then
   camtarget = ct
   if(deadcount >= #tanks-1) then
-   nextstate = postgame 
-   statetime = 1 
+   nextstate = postgame
+   statetime = 1
    return
   end
  end
@@ -580,7 +581,7 @@ end
 
 function updateitemmenu()
  camtarget = nil
- if (btnp(1) or btnp(0)) then 
+ if (btnp(1) or btnp(0)) then
   if(shopitem < 7) then shopitem += 6
   else shopitem -= 6 end
   sfx(9)
@@ -602,11 +603,11 @@ function updateshop()
     -- purchase
     itm = items[shopitem]
     if(itm.cost < 1 or itm.cost > ct.cash or ct.stock[shopitem] > 98) then sfx(11)
-    else 
+    else
      ct.cash -= itm.cost
      ct.stock[shopitem] += 1
      sfx(10)
-    end 
+    end
   end
   if(btnp(4)) then
    -- next
@@ -641,7 +642,7 @@ end
 
 function updatepostgame()
  statetime += 1
- if(statetime > 72) then 
+ if(statetime > 72) then
   statetime = 72
   if(btnp(4) or btnp(5)) nextstate = shop activetank = 1
  end
@@ -744,7 +745,7 @@ function drawgame()
  for b in all(bullets) do
   if(b.sub) then
    local itm=subitems[b.id]
-   local sid,offs = itm.id + b.frame, itm.offsets[b.frame+1] 
+   local sid,offs = itm.id + b.frame, itm.offsets[b.frame+1]
    if(b.id == 1) then circfill(b.x, b.y, 2, 7)
    else spr(sid, b.x+offs.x, b.y+offs.y, 1, 1, b.flip) end
   else
@@ -1469,4 +1470,3 @@ __music__
 00 41424344
 00 41424344
 00 0f101100
-
