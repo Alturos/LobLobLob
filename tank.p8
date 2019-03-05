@@ -18,7 +18,7 @@ gravity=30
 maxslope=3
 minstart=68
 maxstart=92
-cam={x=0,y=0}
+
 camtarget=nil
 camspeed=90
 anglespeed=0
@@ -49,12 +49,7 @@ bloomtypes={
     0x289a, --yellow/orange
     0x7c7c -- blue
 }
-rocktypes={
-    {x=56,y=24},
-    {x=60,y=24},
-    {x=56,y=28},
-    {x=60,y=28}
-}
+
 items={
  { ico=32, name="shell", dmg=50, spalsh=25, size=2, mag=1, duration=.065, c=8, stock = -1, cost = 0},
  { ico=33, name="roll ", dmg=5, spalsh=0, size=0, mag=.1, duration=.01, c=10, stock = 2, cost = 100 },
@@ -69,10 +64,7 @@ items={
  { ico=52, name="fuel ", stock = 4, cost = 50 },
  { ico=18, name="warp ", stock = 2 , cost = 300 }
 }
-subitems={
-    {name="roller", dmg=75, splash=25, size=6, mag=2, duration=.075, id=33, offsets={{x=-4,y=-7}} },
-    {name="bomb", dmg=50, splash=75, size=10, mag=3, duration=.095, id=24, offsets={{x=0,y=-4},{x=0,y=-6},{x=-4,y=-7}} }
-}
+
 teams={
   {c=nil, name="red"},
   {c=0xc61, name="skye"}, -- light blue
@@ -94,7 +86,18 @@ message=nil
 
 function _init()
  cls()
+ cam=v_new(0,0)
  poke(0x5f2d, 1)
+ rocktypes={
+    v_new(56,24),
+    v_new(60,24),
+    v_new(56,28),
+    v_new(60,28)
+ }
+ subitems={
+    {name="roller", dmg=75, splash=25, size=6, mag=2, duration=.075, id=33, offsets={v_new(-4,-7)} },
+    {name="bomb", dmg=50, splash=75, size=10, mag=3, duration=.095, id=24, offsets={v_new(0,-4),v_new(0,-6),v_new(-4,-7)} }
+ }
 end
 
 function resetround()
@@ -158,7 +161,7 @@ function add_tank(team)
   oy=4,
   ax=cos(45/360),
   ay=sin(45/360),
-  cpu=false,
+  cpu=true,
   tracktgl=false,
   k=0,
   d=0,
@@ -324,7 +327,7 @@ function updatebullets()
     if(dist <= defl_r and (t!=ct or b.life > 10)) then
      -- hit deflector, calculate bounce
      local normal = v_normalized(diff)
-     local vel = {x=b.velx,y=b.vely * -1}
+     local vel = v_new(b.velx,b.vely * -1)
      local dot = v_dot(vel, normal)
      local newvel = v_add(v_mult(normal,-2*dot), vel)
      local newpos = v_add(t, v_mult(normal, (defl_r+1)*-1))
@@ -445,7 +448,7 @@ end
 
 function updateplane()
  if(not plactive) return
- camtarget = {x=plx, y=ply+40}
+ camtarget = v_new(plx, ply+40)
  local velx = plspeed * step
  if(not plflip) velx *= -1
  plx += velx
@@ -530,25 +533,34 @@ end
 function updateaim()
  message="aim"
  local pw,ang,x,y = 0,0,0,0,0,0
- if(ct.cpu) return
- -- todo: cpu aiming
+ if(ct.cpu) then
+  local target = picknexttank()
+  local times,vec = calc_shots(tanks[target])
+  if(#times > 0)  then
+   vec = calc_shotvel(tanks[target],times[rndi(#times)+1])
+   setcannon(vec)
+   nextstate = firing
+  end
+ else
+  if (btn(2)) pw += 1
+  if (btn(3)) pw -= 1
+  if (btn(0)) ang += 1
+  if (btn(1)) ang -= 1
+  ct.power = mid(0, 100, ct.power + pw)
+  ct.angle = mid(0, 180, ct.angle + ang)
+  ct.ax = cos(ct.angle/360)
+  ct.ay = sin(ct.angle/360)
+  if(btnp(4)) nextstate = movecam
+  if(btnp(5)) nextstate = firing
+ end
 
- if (btn(2)) pw += 1
- if (btn(3)) pw -= 1
- if (btn(0)) ang += 1
- if (btn(1)) ang -= 1
- ct.power = mid(0, 100, ct.power + pw)
- ct.angle = mid(0, 180, ct.angle + ang)
- ct.ax = cos(ct.angle/360)
- ct.ay = sin(ct.angle/360)
- if(btnp(4)) nextstate = movecam
- if(btnp(5)) then
-  nextstate = firing
+
+
+ if(nextstate == firing) then
   if(ct.stock[ct.item] > 0) ct.stock[ct.item] -= 1
-  
-  local x = ct.x + 4 + (5 * ct.ax)
-  local y = ct.y + 2 + (5 * ct.ay)
-  addbullet(x,y,ct.ax*ct.power,ct.ay*ct.power,ct.item,items[ct.item].c)
+  local x = ct.x + ct.ox--4-- + (5 * ct.ax)
+  local y = ct.y + ct.oy--2-- + (5 * ct.ay)
+  addbullet(x, y, ct.ax * ct.power, ct.ay * ct.power, ct.item, items[ct.item].c)
   setshake(2,0.075)
   sfx(8)
  end
@@ -618,7 +630,8 @@ function updatedeath()
  if(dying) return
 
  if(statetime == 90) then
-  picknexttank()
+  activetank = picknexttank()
+  ct = tanks[activetank]
  end
 
  statetime -= 1
@@ -727,7 +740,7 @@ end
 function updatecamera()
  if(camtarget == nil) return
  local cvel = camspeed * step
- focus = {x=camtarget.x-60, y=camtarget.y-64}
+ focus = v_new(camtarget.x-60, camtarget.y-64)
  camdiff = v_subtr(cam,focus)
  if(flr(v_len(camdiff.x, camdiff.y)) >= cvel) then
   cam = v_add(v_mult(v_normalized(camdiff), cvel), cam)
@@ -1024,13 +1037,13 @@ function drawtitle()
 end
 
 function picknexttank()
- local found = false
+ local found,at = false, activetank
  while(not found) do
-  activetank += 1
-  if(activetank > #tanks) activetank = 1
-  if(tanks[activetank].health > 0) found = true
+  at += 1
+  if(at > #tanks) at = 1
+  if(tanks[at].health > 0) found = true
  end
- ct = tanks[activetank]
+ return at
 end
 
 function drawsplash()
@@ -1100,14 +1113,12 @@ function v_len(x, y)
 end
 
 function v_subtr(a,b)
- return {
-    x = (b.x + (b.ox or 0)) - (a.x + (a.ox or 0)),
-    y = (b.y + (b.oy or 0)) - (a.y + (a.oy or 0))
- }
+ return v_new((b.x + (b.ox or 0)) - (a.x + (a.ox or 0)),
+ (b.y + (b.oy or 0)) - (a.y + (a.oy or 0)))
 end
 
 function v_normalized(v)
- local len,nv = v_len(v.x, v.y), {x=v.x,y=v.y}
+ local len,nv = v_len(v.x, v.y), v_new(v.x,v.y)
  if(len != 0) nv.x /= len nv.y /= len
  return nv
 end
@@ -1122,17 +1133,40 @@ function v_dot(a,b)
 end
 
 function v_mult(v,f)
- return {
-     x=v.x*f,
-     y=v.y*f
- }
+ return v_new(v.x*f, v.y*f)
+end
+
+function v_new(x,y)
+ return {x=x,y=y}
 end
 
 function v_add(a,b)
- return {
-    x = (b.x + (b.ox or 0)) + (a.x + (a.ox or 0)),
-    y = (b.y + (b.oy or 0)) + (a.y + (a.oy or 0))
- }
+ return v_new((b.x + (b.ox or 0)) + (a.x + (a.ox or 0)), (b.y + (b.oy or 0)) + (a.y + (a.oy or 0)))
+end
+
+function calc_shots(target)
+ local diffp,acc,times=v_mult(v_subtr(target,ct),.1),v_new(0,gravity/10),{}
+ local accdot,dpdot,b1=v_dot(acc,acc),v_dot(diffp,diffp),v_dot(diffp,acc) + 100 -- max_pow^2 * .1
+ local disc = sqrt(b1*b1 - accdot * dpdot)
+ if(disc > 0) then -- otherwise, out of range
+  add(times, sqrt((b1 - disc) * 2 / accdot)) -- min time
+  add(times, sqrt((b1 + disc) * 2 / accdot)) -- max time
+  add(times, sqrt(sqrt(2*dpdot/accdot))) -- lowest power time
+ end
+ return times
+end
+
+function calc_shotvel(target,t)
+ local diffp = v_subtr(target,ct)
+ return v_new(diffp.x / t-0, diffp.y / t - gravity * t / 2)
+end
+
+function setcannon(vec)
+ local norm = v_normalized(vec)
+ ct.power = v_len(vec.x, vec.y)
+ ct.angle = round(atan2(-norm.x, norm.y) * 360)
+ ct.ax = norm.x * -1
+ ct.ay = norm.y
 end
 
 function setcam()
@@ -1162,7 +1196,7 @@ function round(a)
 end
 
 function v_round(v)
-	return {x=round(v.x),y=round(v.y)}
+	return v_new(round(v.x),round(v.y))
 end
 
 function lerp(v0, v1, t)
