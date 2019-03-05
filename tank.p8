@@ -43,7 +43,7 @@ bloomtypes={
     0x7c7c -- blue
 }
 items={
- { ico=32, name="shell", dmg=50, spalsh=25, size=2, mag=1, duration=.065, c=8, stock = -1, cost = 0},
+ { ico=32, name="shell", dmg=50, spalsh=25, size=2, mag=1, duration=.065, c=8, stock = 0xFFFF, cost = 0},
  { ico=33, name="roll ", dmg=5, spalsh=0, size=0, mag=.1, duration=.01, c=10, stock = 2, cost = 100 },
  { ico=34, name="bomb ", dmg=50, spalsh=25, size=16, mag=3.5, duration=.3, c=14, stock =  4, cost = 500 },
  { ico=53, name="leap ", dmg=50, spalsh=25, size=6, mag=2, duration=.075, c=11, stock = 4, cost = 100 },
@@ -70,8 +70,7 @@ teams={
   {c=0xaf9, name="sunny"},-- yellow
   {c=0x671, name="gary"}  -- light grey
 }
-bulletfade={10,10,10,10,10,10,9,9,9,15,15,8,8}
-shopitem=1
+
 show_itemselect=false
 message=nil
 
@@ -262,7 +261,7 @@ function _update60()
 end
 
 function updatebullets()
- for i=#bullets,1,-1 do
+ for i=#bullets,1,0xFFFF do
   local b,hit,cancel,itm = bullets[i], false, false
   if(b.sub) itm = subitems[b.id]
   if(not b.sub) itm = items[b.id]
@@ -270,7 +269,7 @@ function updatebullets()
   local lvy = b.vely
   if(b.roll) then
    if(b.x < 0) b.x = 0
-   if(b.x > fieldwidth-1) b.x = fieldwidth
+   if(b.x > fieldwidth - 1) b.x = fieldwidth
    local bx = flr(b.x)
    local l,c,r = (heightmap[bx] or 0), heightmap[bx+1], (heightmap[bx+2] or 0)
    if((c > l and c > r) or abs(b.velx) <= step) then b.velx = 0
@@ -292,8 +291,7 @@ function updatebullets()
   b.x += b.velx * step
   b.y += b.vely * step
   b.life += 1
-  --b.idx += 1
-  --if(b.idx > #bulletfade) b.idx = 1
+
 
   if(itm.name == "mirv " and b.vely >= 0 and lvy < 0) then
    b.split = true
@@ -326,10 +324,10 @@ function updatebullets()
     if(dist <= defl_r and (t!=ct or b.life > 10)) then
      -- hit deflector, calculate bounce
      local normal = v_normalized(diff)
-     local vel = v_new(b.velx,b.vely * -1)
+     local vel = v_new(b.velx,b.vely * 0xFFFF)
      local dot = v_dot(vel, normal)
      local newvel = v_add(v_mult(normal,-2*dot), vel)
-     local newpos = v_add(t, v_mult(normal, (defl_r+1)*-1))
+     local newpos = v_add(t, v_mult(normal, (defl_r+1) * 0xFFFF))
      b.velx = newvel.x
      b.vely = newvel.y
      b.x = newpos.x
@@ -386,7 +384,7 @@ function updatebullets()
 end
 
 function updateblooms(firing)
- for i=#blooms,1,-1 do
+ for i=#blooms,1,0xFFFF do
   local bl = blooms[i]
   if(bl.focus) camtarget = bl
   if(bl.time < 21 or not firing) bl.time += 1
@@ -452,7 +450,7 @@ function updateplane()
  if(not plactive) return
  camtarget = v_new(plx, ply+40)
  local velx = plspeed * step
- if(not plflip) velx *= -1
+ if(not plflip) velx *= 0xFFFF
  plx += velx
  pltime += 1
  if((plflip and plx > fieldwidth + 32) or (plx < -32 and not plflip)) then
@@ -470,7 +468,7 @@ function updateplane()
   plopen = true
   plbtime -= 1
   local bsp = plspeed
-  if(not plflip) bsp *= -1
+  if(not plflip) bsp *= 0xFFFF
   if(plbtime < 1 and plbombcount > 0) then
    plbtime = 20 
    addbomb(plbayx + 2, ply + 16, bsp, 0, plflip, 2) 
@@ -593,7 +591,7 @@ function updatedeath()
  -- finish explosions before doing anything else.
  if(#blooms > 0) return
  local falling,dying = false,false
- for i=#tanks, 1, -1 do
+ for i=#tanks, 1, 0xFFFF do
   local t=tanks[i]
   local fl,y=heightmap[flr(t.x)+5], flr(t.y) + 8
   local fdist,h = gravity * step, fl - y
@@ -611,7 +609,7 @@ function updatedeath()
  fallscalcd = true
  if(falling) return
  local mdc=52
- for i=#tanks, 1, -1 do
+ for i=#tanks, 1, 0xFFFF do
   local t=tanks[i]
   if(t.falld and t.falld > 0) t.health -= t.falld t.falld = 0
   if(t.fell) t.fell=false t.chute = false
@@ -641,7 +639,7 @@ function updatedeath()
  statetime -= 1
  if(statetime <= 90) then
   camtarget = ct
-  if(deadcount >= #tanks-1) then
+  if(deadcount >= #tanks - 1) then
    nextstate = postgame
    statetime = 1
    return
@@ -663,7 +661,7 @@ function updatetitle()
   end
  elseif(btnp(4) or btnp(5)) then
   titlefade = true
-  music(-1, 144)
+  music(0xFFFF, 144)
   sfx(63)
  end
 end
@@ -813,11 +811,11 @@ function drawgame()
   if(t.tracktgl) pal(13,5) pal(5,13)
   if(t.health > 0 or t.deathclock < 1) then
    if(t.grade_l == t.grade_r) then spr(t.sprite,t.x,t.y)
-   elseif(t.grade_r > 1 or t.grade_l < -1) then spr(17,t.x,t.y)
-   elseif(t.grade_l > 1 or t.grade_r < -1) then spr(17,t.x,t.y,1,1,true)
+   elseif(t.grade_r > 1 or t.grade_l < 0xFFFF) then spr(17,t.x,t.y)
+   elseif(t.grade_l > 1 or t.grade_r < 0xFFFF) then spr(17,t.x,t.y,1,1,true)
    elseif(t.grade_r > 0 or t.grade_l < 0) then spr(16,t.x,t.y)
    elseif(t.grade_l > 0 or t.grade_r < 0) then spr(16,t.x,t.y,1,1,true) end
-   spr(t.frame,t.x,t.y-1)
+   spr(t.frame,t.x,t.y - 1)
   elseif(t.deathclock>40) then -- nuffin
   elseif(t.deathclock>30) then spr(29,t.x-4,t.y-8,2,2)
   elseif(t.deathclock>20) then spr(27,t.x-4,t.y-8,2,2)
@@ -825,10 +823,10 @@ function drawgame()
   else spr(41,t.x,t.y) end
   pal()
   if(t.chute and t.fell) palt(12,true) spr(51,t.x,t.y-5) palt()
-  if(t.shield and t.shp > 0) circ(t.x+4,t.y+4,shield_r,sget(124-flr(t.shp/2),0)) circ(t.x+4,t.y+4,shield_r-1,sget(121,0))
-  if(t.deflector and t.shp > 0) circ(t.x+4,t.y+4,defl_r,sget(128-t.shp,0)) circ(t.x+4,t.y+4,defl_r-1,sget(125,0))
+  if(t.shield and t.shp > 0) circ(t.x+4,t.y+4,shield_r,sget(124-flr(t.shp/2),0)) circ(t.x+4,t.y+4,shield_r - 1,sget(121,0))
+  if(t.deflector and t.shp > 0) circ(t.x+4,t.y+4,defl_r,sget(128-t.shp,0)) circ(t.x+4,t.y+4,defl_r - 1,sget(125,0))
   if(t == ct) then
-   if(state < firing) spr(20, t.x-1, t.y-11)
+   if(state < firing) spr(20, t.x - 1, t.y - 11)
    if(state == aim) circ(t.x + 4 + (8 * t.ax), t.y + 1 + (8 * t.ay), 1, 10)
   end
  end
@@ -862,7 +860,7 @@ function drawgame()
    else spr(sid, b.x+offs.x, b.y+offs.y, 1, 1, b.flip) end
   else
    pset(flr(b.px), flr(b.py),6)
-   pset(flr(b.x),flr(b.y),b.c)--bulletfade[b.idx])
+   pset(flr(b.x),flr(b.y),b.c)
   end
  end
  drawblooms()
@@ -908,7 +906,7 @@ function drawui()
   local msg = teams[ct.team].name .. ": " .. message
   local width,cl=(#msg*4)+5,shr(band(teams[ct.team].c or 0x800,0xf00),8) or 8
   local x=128/2 -width/2
-  rect(x-1,18,x+width+1,26,7)
+  rect(x - 1,18,x+width+1,26,7)
   rectfill(x,19,x+width,25,0)
   if(cl< 3) rectfill(x,19,x+width,25,5)
   print(msg, x+3,20,cl)
@@ -918,10 +916,10 @@ end
 function drawmap()
  local dino=0
  for x=1, #heightmap do
-  line(x-1, heightmap[x], x-1, 128, 4)
+  line(x - 1, heightmap[x], x - 1, 128, 4)
   --fillp(0b1111000011110000)
   fillp(0b1010010110100101)
-  if(grassmap[x] and heightmap[x] <= grassmap[x]) line(x-1, heightmap[x], x-1, grassmap[x], 0xab)
+  if(grassmap[x] and heightmap[x] <= grassmap[x]) line(x - 1, heightmap[x], x - 1, grassmap[x], 0xab)
   fillp()
  end
  for rock in all(rockmap) do --pull in rock table and draw each rock
@@ -944,8 +942,8 @@ function drawselectitem()
     for i=1, #items, 1 do
      local itm = items[i]
      local stock = ct.stock[i]
-     local selected,shopselect,hasitem,tc = itm == items[ct.item], itm == items[shopitem], stock > 0 or stock == -1, 7
-     if(stock == -1) stock = 99
+     local selected,shopselect,hasitem,tc = itm == items[ct.item], itm == items[shopitem], stock > 0 or stock == 0xFFFF, 7
+     if(stock == 0xFFFF) stock = 99
      if(stock < 9) stock = "0" .. stock
      if(not hasitem) then pal(12, 5) tc = 5
      elseif(shopselect) then palt(12,true) tc = 10
@@ -967,11 +965,11 @@ function drawshop()
     local y=36 x=10
     for i=1, #items, 1 do
      local itm = items[i]
-     local selected,shopselect,hasitem,tc = itm == items[ct.item], itm == items[shopitem], ct.stock[i] > 0 or ct.stock[i] == -1, 7
+     local selected,shopselect,hasitem,tc = itm == items[ct.item], itm == items[shopitem], ct.stock[i] > 0 or ct.stock[i] == 0xFFFF, 7
      if(itm.cost < 1 or itm.cost > ct.cash) then pal(12, 5) tc = 5
      elseif(shopselect) then palt(12,true) tc = 10 end
      local stock = ct.stock[i]
-     if(stock == -1) stock = 99
+     if(stock == 0xFFFF) stock = 99
      if(stock < 9) stock = "0" .. stock
      local price
      if((itm.cost) < 1) then price = ":free"
@@ -1008,7 +1006,7 @@ function drawlogo()
   nextstate = title
   titlefade = false
   statetime = 0
-  sfx(-1,0)
+  sfx(0xFFFF,0)
   music(0)
   cls()
   palt()
@@ -1020,7 +1018,7 @@ end
 function drawtitle()
  rectfill(0,12,128,72,1)
  pal(1,0)
- map(0,3,-1,1,16,1)
+ map(0,3,0xFFFF,1,16,1)
  pal()
  map(8,4,0,0,16,3)
  fillp(0b1010010110100101)
@@ -1077,7 +1075,7 @@ function drawblooms()
 
   if(bl.time >18) grd = rotl(bor(shr(grd,16), grd),4*flr((bl.time-20)/5))
 
-  for i=mx,mn,-1 do
+  for i=mx,mn,0xFFFF do
    if(i >= 4 * ringsize) then c(bl.x,bl.y,i,shr(band(grd,0xf000),12))
    elseif(i >= 3 * ringsize) then c(bl.x,bl.y,i,shr(band(grd,0x0f00),8))
    elseif(i >= 2 * ringsize) then c(bl.x,bl.y,i,shr(band(grd,0x00f0),4))
@@ -1166,7 +1164,7 @@ function setcannon(vec)
  local norm = v_normalized(vec)
  ct.power = v_len(vec.x, vec.y)
  ct.angle = round(atan2(-norm.x, norm.y) * 360)
- ct.ax = norm.x * -1
+ ct.ax = norm.x * 0xFFFF
  ct.ay = norm.y
 end
 
@@ -1181,11 +1179,9 @@ end
 
 function screen_shake()
   local fade = 0.95
-  offset_x=(1-rnd(2))*shakemag
-  offset_y=(1-rnd(2))*shakemag
-  offset_x*=offset
-  offset_y*=offset
-
+  offset_x=(1-rnd(2))*shakemag*offset
+  offset_y=(1-rnd(2))*shakemag*offset
+  
   offset*=fade
   if offset<0.05 then
     offset=0
