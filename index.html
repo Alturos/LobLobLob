@@ -1,0 +1,773 @@
+<html manifest="game.manifest">                                           <!-- <= LINK TO MANIFEST (to cache files for offline-access= -->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <!--
+    Based on https://github.com/headjump/pico8_html_template
+    You are free to remove this comment or leave it here so others may find and use the repo as well :)
+  -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, minimal-ui">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Game Title">           <!-- <= WEBAPP TITLE -->
+  <link rel="apple-touch-icon" href="icon.png">                           <!-- <= YOUR ICON -->
+  <link rel="icon" href="icon.png">                                       <!-- <= YOUR ICON -->
+  <!--
+    Icon info:
+    ----------
+    There are many different resolutions for different devices supported or recommended,
+    but I wanted this template to be easy to use "manually" and for me it works fine
+    to have a single PNG icon at 200x200. (200x200 is the minimum for facebok-sharing to use the og:image as thumbnail)
+  -->
+  <title>Lob! Lob! Lob!</title>                                               <!-- <= WEBSITE TITLE -->
+  <meta name="description" content="Lob! Lob! Lob! for Pico-8">                    <!-- <= SITE DESCRIPTION as seen by web-search-engines -->
+
+  <!-- Info as seen by sharing apps like WhatsApp or Facebook, so they can show a preview-image and description when you share the URL -->
+  <meta property="og:type"        content="game" />
+  <meta property="og:title"       content="Lob! Lob! Lob!" />                                               <!-- <= GAME TITLE -->
+  <meta property="og:image"       content="./icon.png" />  <!-- <= GAME IMAGE (you can also use a screenshot instead of the icon, but be sure to use the FULL URL here!) -->
+  <meta property="og:description" content="In the year 30XD, There were... A bunch of tanks... That started... Fighting!" />                                         <!-- <= GAME DESCRIPTION -->
+
+  <style TYPE="text/css">
+	@font-face {
+		font-family: '04b_03';
+		src:url('https://itch.io/static/fonts/04b03.woff2')
+	}
+    /* ------- DEFINE BUTTON COLORS ------- */
+    :root {
+      --btn: #1288D1;
+      --btn--pressed: #29ADFF;
+
+      --btnIcon: #222222;
+      --btnIcon--pressed: #111111;
+
+      --btn__analogBg: #232f37;
+    }
+    body { font-family: Verdana, Arial, sans-serif; padding: 0; margin: 0; outline: none; background: #222; overflow: hidden; }
+
+    /* ------ POSITION GAME-CANVAS ------ */
+    canvas#canvas {
+      width: 512px; height: 512px;                /* max game size: 512px */
+      image-rendering: optimizeSpeed;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: optimize-contrast;
+      image-rendering: pixelated;
+      -ms-interpolation-mode: nearest-neighbor;
+      border: 0;
+	  background-color: #000
+    }
+    @media screen and (max-width: 512px) {        /* game shrinks to fit screen on smaller screens */
+      canvas#canvas { width: 100%; height: auto; } }
+    .canvas-wrapper { text-align: center; margin: auto; }
+    .canvas-wrapper canvas { margin: 0 auto; }    /* center game */
+    @media screen and (min-height: 700px) {       /* game has top-margin on high screens */
+      .canvas-wrapper { margin-top: 80px; margin: auto; } }
+    @media screen and (min-height: 880px) {       /* game has more top-margin on higher screens */
+      .canvas-wrapper { margin-top: 180px; margin: auto; } }
+
+    /* ------ pico8 control buttons [reset] [pause] [mute] ------ */
+    .pico8_btns { text-align: center; }
+	.hidden { display: none; }
+    .pico8_el { width:82px; display:inline-block; margin: 1px; padding: 4px; text-align: center; color:#fff; background-color:#777; font-size: 9pt; cursor: pointer; }
+    .pico8_el a{ text-decoration: none; color:#fff; }
+    .pico8_el:hover{ background-color:#aaa; }
+    .pico8_el:link{ background-color:#aaa; }
+
+    /* ------ HELPER CLASSES FOR TOUCH ELEMENTS ------ */
+    .touch-not-supported .show-if-touch { display: none; }
+    .touch-supported .show-if-not-touch { display: none; }
+
+    /* ------ HELPER CLASSES FOR STANDALONE ELEMENTS ------ */
+    .not-standalone .show-if-standalone { display: none; }
+    .is-standalone .show-if-not-standalone { display: none; }
+	
+	.runButton { 
+		position: absolute;
+		left: 0;
+		right: 0;
+		margin: auto;
+		top: 25%;
+		outline: none;
+		cursor: pointer;
+		background-color: #2de800; 
+		color: #ffffff; 
+		width: 80px; 
+		border: 1px solid rgba(0,0,0,0.1);
+		border-radius: 3px; 
+		height: 35px; 
+		font-weight: bold; 
+		font-family: '04b_03'; 
+		font-size: 14px;
+		z-index: 2;}
+	
+	.runButton:hover {
+		background-color: #57AA3D;
+	}
+  </style>
+
+</head>
+
+<body>
+
+<script type="text/javascript">
+  // ----------------- DISPLAY TOUCH CONTROLS? ----------------- %>
+  if(
+    window.location.href.indexOf("?touch") !== -1     // to test on not-touch devices: add "?touch" to the URL
+    ||window.location.href.indexOf("&touch") !== -1
+    || navigator.userAgent.match(/Android/i)
+    || navigator.userAgent.match(/webOS/i)
+    || navigator.userAgent.match(/iPhone/i)
+    || navigator.userAgent.match(/iPad/i)
+    || navigator.userAgent.match(/iPod/i)
+    || navigator.userAgent.match(/BlackBerry/i)
+    || navigator.userAgent.match(/Windows Phone/i)
+  ) {
+    document.body.className += " touch-supported";
+    window.TOUCH = true;
+  } else {
+    document.body.className += " touch-not-supported";
+  }
+
+  // ----------------- IS STANDALONE WEBAPP? ----------------- %>
+  if(
+    window.location.href.indexOf("?standalone") !== -1 // to test on not-standalone devices: add "?standalone" to the URL
+    || window.location.href.indexOf("&standalone") !== -1
+    || navigator.standalone
+  ) {
+    document.body.className += " is-standalone";
+    window.TOUCH = true;
+  } else {
+    document.body.className += " not-standalone";
+  }
+
+  // To test both TOUCH and STANDALONE, add "?touch&standalone" to the URL
+</script>
+
+<div class="canvas-wrapper">
+  <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+  <input type="button" id="runButton" class="runButton" value="Start" onclick="runGame()" />
+</div>
+
+<div>
+  <script type="text/javascript">
+    // ------ SETUP USED FOR PICO8 CART ------
+    var
+      canvas = document.getElementById("canvas"),
+      Module = {canvas: canvas};
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+	Module.noInitialRun = true;
+    // ------ BLOCK CURSOR-KEYS FROM SCROLLING ------
+    var onKeyDown_blocker= function(event) {
+      event = event || window.event;
+      var o = document.activeElement;
+      if (!o || o == document.body || o.tagName == "canvas") {
+        if ([32, 37, 38, 39, 40].indexOf(event.keyCode) > -1) {
+          if (event.preventDefault) event.preventDefault();
+        }
+      }
+    };
+    document.addEventListener('keydown', onKeyDown_blocker, false);
+	
+	function runGame() {
+		var elem = document.querySelector('#runButton');
+		elem.parentNode.removeChild(elem);
+		elem = document.getElementById("pico8_btns");
+		elem.classList.remove("hidden");
+		Module.calledRun = false;
+		window.shouldRunNow = true;
+		Module.run();
+	}
+  </script>
+  
+  <script src="pico8gamepad.js"></script>
+  <script async type="text/javascript" src="game.js"></script>       <!-- <= INCLUDES YOUR cart.js FILE -->
+
+
+  <!-- PICO8 CONTROL BUTTONS [reset] [pause] [fullscreen - not visible when using touch-control] [mute] -->
+  <div class="pico8_btns hidden" id="pico8_btns">
+    <div class="pico8_el" onclick="Module.pico8Reset();">
+      <img
+        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAaklEQVR4Ae2dOwoAMQhE15A+rfc/3bZ7AlMnQfywCkKsfcgMM9ZP+QHtIn0vLeBAFduiFdQ/0DmvtR5LXJ6CPSXe2ZXcFNlTxFbemKrbZPs35XogeS9xeQr+anT6LzoOwEDwZJ7jwhXUnwkTTiDQ2Ja34AAAABB0RVh0TG9kZVBORwAyMDExMDIyMeNZtsEAAAAASUVORK5CYII="
+        alt="Reset" width=12 height=12/> Reset</div>
+    <div class="pico8_el" onclick="Module.pico8TogglePaused();">
+      <img
+        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAPUlEQVR4Ae3doQ0AIAxEUWABLPtPh2WCq26DwFSU/JPNT166QSu/Hg86W9dwLte+diP7AwAAAAAAgD+A+jM2ZAgo84I0PgAAABB0RVh0TG9kZVBORwAyMDExMDIyMeNZtsEAAAAASUVORK5CYII="
+        alt="Pause" width=12 height=12/> Pause</div>
+    <div class="pico8_el show-if-not-touch" onclick="Module.requestFullScreen(true, false);">
+      <img
+        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAaklEQVR4Ae2dsQ1AIQhExfze1v2ns3UCrfgFhmgUUAoGgHscp21wX9BqaZoDojbB96OkDJKNcTN2BHTyYNYmoT2BlPL7BKgcPfHjAVXKKadkHOn9K1r16N0czN6a95N8mnA7Aq2fTZ3Af3UKmCSMazL8HwAAABB0RVh0TG9kZVBORwAyMDExMDIyMeNZtsEAAAAASUVORK5CYII="
+        alt="Fullscreen" width=12 height=12/> Fullscreen</div>
+    <div class="pico8_el" onclick="Module.pico8ToggleSound();">
+      <img
+        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAXklEQVR4Ae2doQ4AIQxD4YLH8v9fh+ULhjpxxSwLg2uyapr1JRu1iV5Z+1BGl4+xNpX38SYo2uRvYiT5LwEmt+ocgXVLrhPEgBiw8Q5w7/kueSkK+D2tJO4E/I3GrwkqQCBabEj/4QAAABB0RVh0TG9kZVBORwAyMDExMDIyMeNZtsEAAAAASUVORK5CYII="
+        alt="Toggle Sound" width=12 height=12/> Sound</div>
+  </div>
+</div>
+
+<!-- ASK USER TO SET THE SITE AS A STANDALONE-WEBAPP -->
+
+<div class="addToHomescreen__hint">
+	Grab the full downloadable version for an even smoother experience!
+</div>
+<style>
+  .addToHomescreen__hint {
+    font-size: .75em;
+    margin: .5em 2em;
+    text-align: center;
+    color: white;
+    font-family: '04b_03';
+  }
+  .sourceLink{
+    font-size: .75em;
+    margin: .5em 2em;
+    text-align: center;
+    color: white;
+    font-weight: bold;}
+  .sourceLink a{
+    color: var(--btn);
+    text-decoration: underline;
+  }
+</style>
+
+<style>
+  /* toggle between different buttonsets: */
+  .buttonset { display: none; }
+  .buttonset-use-1 .buttonset-1,
+  .buttonset-use-2 .buttonset-2,
+  .buttonset-use-3 .buttonset-3,
+  .buttonset-use-4 .buttonset-4,
+  .buttonset-use-5 .buttonset-5 { display: block; } /* Add more as you need them */
+
+  /* actual buttons: */
+  .btns { position: fixed; bottom: 0; width: 100%; direction:ltr; height: 90px; } /* wrapper for buttons - docks to bottom */
+  .btn { /* generic button style: prevent text selection on touch */
+    -webkit-touch-callout: none; /* iOS Safari */
+    -webkit-user-select: none; /* Safari */
+    -moz-user-select: none; /* Firefox */
+    -ms-user-select: none; /* Internet Explorer/Edge */
+    user-select: none; /* Non-prefixed version, currently supported by Chrome and Opera */
+    height: 100%;
+    font-size: 35px;
+    font-weight: bold;
+    color: var(--btnIcon);
+    text-align: center;
+    width: 24%;
+    max-width: 180px;
+  }
+  .btn svg path {
+    fill: var(--btnIcon) !important;
+  }
+  @media screen and (max-height: 640px) and (min-width: 500px) {  /* make canvas smaller for small screen-height to make room for touch-buttons */
+    canvas#canvas { max-width: 420px; height: 420px; }
+    .btns { height: 65px; } }
+  @media screen and (max-height: 520px) {   /* less height on low screens */
+    .btns { height: 50px; } }
+  .btn--wide { width: 35%; max-width: 200px; }
+  .btn--extra-wide { width: 48%; max-width: 280px; }
+  .pull-left { float:left; }
+  .pull-right { float:right; }
+  .axis-leftRight { position: relative; background: var(--btn);}
+  .axis-upDown { position: relative; background: var(--btn); height: 130%; top: -30%; }
+  .axis-upDownLeftRight { position: relative; height: 140%; top: -40%; }
+  .axis-analog { position: relative; height: 140%; top: -40%; background-color: var(--btn__analogBg); }
+  .btn__stick {
+    position: absolute; left: 50%; top: 50%;
+  }
+  .btn__stick__inner {
+    width: 50px; height: 50px; position: absolute; background-color: var(--btn); border-radius: 25px;
+    margin-left: -25px; margin-top: -25px;
+  }
+  .axis-leftRight .btn__leftArrowStyle { position: absolute; width: 50%; height: 100%; }
+  .axis-leftRight .btn__rightArrowStyle { position: absolute; width: 50%; height: 100%; right: 0; }
+  .axis-upDown .btn__upArrowStyle { position: absolute; width: 100%; height: 50%; }
+  .axis-upDown .btn__downArrowStyle { position: absolute; width: 100%; height: 50%; bottom: 0; }
+  .btn__horAxisBg {
+    position: absolute;
+    background-color: var(--btn);
+    top: 30%;
+    height: 40%;
+    width: 90%;
+    left: 5%;
+  }
+  .btn__vertAxisBg {
+    position: absolute;
+    background-color: var(--btn);
+    left: 35%;
+    width: 30%;
+    height: 100%;
+  }
+  .axis-upDownLeftRight .btn__leftArrowStyle {
+    position: absolute;
+    width: 30%;
+    left: 5%;
+    height: 40%;
+    top: 30%;
+  }
+  .axis-upDownLeftRight .btn__rightArrowStyle {
+    position: absolute;
+    width: 30%;
+    height: 40%;
+    top: 30%;
+    right: 5%;
+  }
+  .axis-upDownLeftRight .btn__upArrowStyle {
+    position: absolute;
+    width: 30%;
+    left: 35%;
+    height: 30%;
+    top: 0
+  }
+  .axis-upDownLeftRight .btn__downArrowStyle {
+    position: absolute;
+    width: 30%;
+    left: 35%;
+    height: 30%;
+    bottom: 0;
+  }
+  .axis-upDownLeftRight.axis-upDownLeftRight--upDownAtFullWidth .btn__upArrowStyle,
+  .axis-upDownLeftRight.axis-upDownLeftRight--upDownAtFullWidth .btn__downArrowStyle {
+    width: 100%;
+    left: 0;
+  }
+  .btn svg { /* center SVGs in buttons */
+    position: absolute;
+    left: 50%; top: 50%;
+    margin-left: -15px; margin-top: -15px;
+  }
+  .axis-upDownLeftRight.btn svg { /* D-PAD icons smaller */
+    width: 20px;
+    height: 20px;
+    margin-left: -10px; margin-top: -10px;
+  }
+  .btn .btn__stick__inner svg{
+    margin-left: -23px; margin-top: -23px;
+  }
+  .btn-fire-x, .btn-fire-o { background-color: var(--btn); position: relative; }
+  .pressed_X .btn-fire-x,
+  .pressed_O .btn-fire-o,
+  .pressed_U .btn__upArrowStyle--bg,
+  .pressed_D .btn__downArrowStyle--bg,
+  .pressed_L .btn__leftArrowStyle--bg,
+  .pressed_R .btn__rightArrowStyle--bg,
+  .pressed_L .axis-leftRight .btn__leftArrowStyle,
+  .pressed_R .axis-leftRight .btn__rightArrowStyle {
+    background-color: var(--btn--pressed); /* change color when pressed */
+  }
+  .pressed_X .btn-fire-x svg path,
+  .pressed_O .btn-fire-o svg path,
+  .pressed_U .btn__upArrowStyle--bg svg path,
+  .pressed_D .btn__downArrowStyle--bg svg path,
+  .pressed_L .btn__leftArrowStyle--bg svg path,
+  .pressed_R .btn__rightArrowStyle--bg svg path,
+  .pressed_L .axis-leftRight .btn__leftArrowStyle svg path,
+  .pressed_R .axis-leftRight .btn__rightArrowStyle svg path {
+    fill: var(--btnIcon--pressed) !important; /* change color when pressed */
+  }
+  .clear{ clear:both; }
+</style>
+
+<div id="btns-wrapper" class="show-if-touch clear">
+  <div id="btns-markUsedButtonset"><!-- Gets class for used buttonset
+                                    (don't add other classes here, they'll get overridden! -->
+    <div id="btns-markPressed">   <!-- Gets classes for all pressed buttons:
+                                    'pressed_L', 'pressed_R', 'pressed_U', 'pressed_D', 'pressed_X', 'pressed_O'
+                                    (don't add other classes here, they'll get overridden! -->
+
+
+      <!------- BUTTONSET 1 - Up, Down, Left and Right ----------
+             â†‘
+           â†   â†’      O  X
+             â†“
+
+      (If you just want a single touch-controller, simply remove the classes "buttonset" and "buttonset-1" below and remove the other touch-controller)
+      -------------------------------->
+      <div class="btns buttonset buttonset-1">
+        <div class="axis-upDownLeftRight btn btn--extra-wide pull-left">
+          <!-- Axis background -->
+          <div class="btn__horAxisBg"></div>
+          <div class="btn__vertAxisBg"></div>
+
+          <!-- Separate divs for btn-backgrounds and icons, so highlighted backgrounds don't overlap icons of other buttons-->
+          <div class="btn__leftArrowStyle btn__leftArrowStyle--bg"></div>
+          <div class="btn__rightArrowStyle btn__rightArrowStyle--bg"></div>
+          <div class="btn__upArrowStyle btn__upArrowStyle--bg"></div>
+          <div class="btn__downArrowStyle btn__downArrowStyle--bg"></div>
+
+          <div class="btn__leftArrowStyle"><svg width="30" height="30" viewBox="0 0 30 30" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;"><path d="M22.536,0.47L3.207,15L22.536,29.53L22.536,0.47Z" style="fill:#222;"/></svg></div>
+          <div class="btn__upArrowStyle"><svg width="30" height="30" viewBox="0 0 8 8" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;"><path id="UP" d="M0.113,5.409l3.487,-4.639l3.487,4.639l-6.974,0Z" style="fill:#222;"/></svg></div>
+          <div class="btn__downArrowStyle"><svg width="30" height="30" viewBox="0 0 8 8" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;"><path id="DOWN" d="M7.087,1.791l-3.487,4.639l-3.487,-4.639l6.974,0Z" style="fill:#222;"/></svg></div>
+          <div class="btn__rightArrowStyle"><svg width="30" height="30" viewBox="0 0 30 30" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;"><path d="M7.464,0.47L26.793,15L7.464,29.53L7.464,0.47Z" style="fill:#222;"/></svg></div>
+        </div>
+
+        <div class="btn-fire-x btn pull-right"><svg width="30" height="30" viewBox="0 0 30 30" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;"><path d="M9.05,3.207L15,9.157L20.95,3.207L26.793,9.05L20.843,15L26.793,20.95L20.95,26.793L15,20.843L9.05,26.793L3.207,20.95L9.157,15L3.207,9.05L9.05,3.207Z" style="fill:#222;"/></svg></div>
+        <div class="btn-fire-o btn pull-right"><svg width="30" height="30" viewBox="0 0 30 30" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;"><circle cx="15" cy="15" r="11.253" style="fill:#222;"/></svg></div>
+
+        <div class="clear"></div>
+      </div>
+
+
+      <!------- BUTTONSET 2 - Left and Right ----------
+
+           â†   â†’       O  X
+
+      -------------------------------->
+      <div class="btns buttonset buttonset-2">
+        <div class="axis-leftRight btn btn--extra-wide pull-left">
+          <div class="btn__leftArrowStyle"><svg width="30" height="30" viewBox="0 0 30 30" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;"><path d="M22.536,0.47L3.207,15L22.536,29.53L22.536,0.47Z" style="fill:#222;"/></svg></div>
+          <div class="btn__rightArrowStyle"><svg width="30" height="30" viewBox="0 0 30 30" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;"><path d="M7.464,0.47L26.793,15L7.464,29.53L7.464,0.47Z" style="fill:#222;"/></svg></div>
+        </div>
+
+		<div class="btn-fire-x btn pull-right"><svg width="30" height="30" viewBox="0 0 30 30" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;"><path d="M9.05,3.207L15,9.157L20.95,3.207L26.793,9.05L20.843,15L26.793,20.95L20.95,26.793L15,20.843L9.05,26.793L3.207,20.95L9.157,15L3.207,9.05L9.05,3.207Z" style="fill:#222;"/></svg></div>
+		<div class="btn-fire-o btn pull-right"><svg width="30" height="30" viewBox="0 0 30 30" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;"><circle cx="15" cy="15" r="11.253" style="fill:#222;"/></svg></div>
+        
+        <div class="clear"></div>
+      </div>
+
+
+
+      <!------- BUTTONSET 3 - Up and Down ----------
+             â†‘
+                       X
+             â†“
+      -------------------------------->
+      <div class="btns buttonset buttonset-3">
+        <div class="axis-upDown btn btn--wide pull-left">
+          <!-- Separate divs for btn-backgrounds and icons, so highlighted backgrounds don't overlap icons of other buttons-->
+          <div class="btn__upArrowStyle btn__upArrowStyle--bg"></div>
+          <div class="btn__downArrowStyle btn__downArrowStyle--bg"></div>
+
+          <div class="btn__upArrowStyle"><svg width="30" height="30" viewBox="0 0 8 8" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;"><path id="UP" d="M0.113,5.409l3.487,-4.639l3.487,4.639l-6.974,0Z" style="fill:#222;"/></svg></div>
+          <div class="btn__downArrowStyle"><svg width="30" height="30" viewBox="0 0 8 8" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;"><path id="DOWN" d="M7.087,1.791l-3.487,4.639l-3.487,-4.639l6.974,0Z" style="fill:#222;"/></svg></div>
+        </div>
+
+        <div class="btn-fire-x btn btn--wide pull-right"><svg width="30" height="30" viewBox="0 0 30 30" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;"><path d="M9.05,3.207L15,9.157L20.95,3.207L26.793,9.05L20.843,15L26.793,20.95L20.95,26.793L15,20.843L9.05,26.793L3.207,20.95L9.157,15L3.207,9.05L9.05,3.207Z" style="fill:#222;"/></svg></div>
+
+        <div class="clear"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script type="text/javascript">
+  // --------- HANDLE TOUCH-EVENTS ON BUTTONS ---------
+  //
+  // IMPORTANT FOR TESTING:
+  //   The buttons ONLY work with touch-events, so you can't test them
+  //   on a regular browser with your mouse.
+  //   Chrome allows for simulating touch-events in the developer-tools:
+  //   -> https://developers.google.com/web/tools/chrome-devtools/device-mode/
+  if(window.TOUCH) {
+	initTouchButtons();   
+  }
+</script>
+<!-- 8< -- ## FULLSCREEN FIX STARTS HERE ## -- -->
+<script type="text/javascript">
+
+	{
+		var breaks = canvas.parentNode.getElementsByTagName('BR');
+		for (var i = 0; i < breaks.length; i++)
+			canvas.parentNode.removeChild(breaks[i]);
+	}
+	canvas.parentNode.style.width="512";
+	screen = document.createElement("div");
+	screen.style.display = "flex";
+	screen.style.alignItems = "center";
+	canvas.parentNode.replaceChild(screen,canvas);
+	screen.appendChild(canvas);
+    
+
+	function resizeCanvas()
+	{
+		var mult=128;
+		var csize=Math.floor(512/mult)*mult;
+		if (document.fullscreenElement || document.mozFullScreenElement || document.webkitIsFullScreen || document.msFullscreenElement)
+		{
+			csize=Math.max(mult,Math.min(Math.floor(window.innerWidth/mult)*mult,Math.floor(window.innerHeight/mult)*mult));
+		}
+		canvas.style.width = csize;
+		canvas.style.height = csize;
+		screen.parentNode.style.width=csize;
+		window.focus();
+	}
+
+	window.addEventListener('load', resizeCanvas, false);
+	window.addEventListener('resize', resizeCanvas, false);
+	window.addEventListener('orientationchange', resizeCanvas, false);
+	window.addEventListener('fullscreenchange', resizeCanvas, false);
+	window.addEventListener('webkitfullscreenchange', resizeCanvas, false);//for itch.app
+
+	function toggleFullscreen()
+	{
+		if (document.fullscreenElement || document.mozFullScreenElement || document.webkitIsFullScreen || document.msFullscreenElement)
+		{//exit fs
+			screen.cancelFullscreen = screen.cancelFullscreen || screen.mozCancelFullScreen || screen.webkitCancelFullScreen;
+			screen.cancelFullscreen();
+		}
+		else
+		{//enter fs
+			screen.requestFullscreen = screen.requestFullscreen || screen.mozRequestFullScreen || screen.webkitRequestFullScreen;
+			screen.requestFullscreen();
+		}
+	}
+
+	function setrfds()
+	{
+		if (Module.requestFullScreen)
+			Module.requestFullScreen = toggleFullscreen;
+		else
+			requestAnimationFrame(setrfds);
+	}
+	requestAnimationFrame(setrfds);
+</script>
+<!-- 8< -- ## FULLSCREEN FIX ENDS HERE ## -- -->
+
+<!-- 8< -- ## GL SHADER STUFF STARTS HERE ## -- -->
+
+<!-- vertex shader -->
+<script id="some-vertex-shader" type="x-shader/x-vertex">
+	attribute vec2 a_position;
+	attribute vec2 a_texCoord;
+	varying   vec2 v_texCoord;
+
+	void main()
+	{
+		gl_Position = vec4(a_position.x, a_position.y, 0, 1);
+
+		v_texCoord = a_texCoord;
+	}
+</script>
+
+<!-- fragment shader -->
+<script id="some-fragment-shader" type="x-shader/x-fragment">
+
+	precision mediump float;
+
+	varying vec2		v_texCoord;
+	uniform vec2		u_canvasSize;
+	uniform sampler2D	u_texture;
+
+	// PUBLIC DOMAIN CRT STYLED SCAN-LINE SHADER
+	//   by Timothy Lottes
+	// https://www.shadertoy.com/view/XsjSzR
+	//   modified (borked) by ultrabrite
+
+	// Emulated input resolution.
+	const vec2 texSize=vec2(256.0,128.0);
+
+	// Hardness of scanline.
+	//  -8.0 = soft
+	// -16.0 = medium
+	float hardScan=-8.0;
+
+	// Hardness of pixels in scanline.
+	// -2.0 = soft
+	// -4.0 = hard
+	const float hardPix=-2.0;
+
+	// Hardness of shadow mask in scanline.
+	// 0.5 = hard
+	// 3.0 = soft
+	const float hardMask=2.0;
+
+	const vec3 compos = vec3(1.0/6.0,1.0/2.0,5.0/6.0);
+
+	// Display warp.
+	// 0.0 = none
+	// 1.0/8.0 = extreme
+	const vec2 warp=vec2(1.0/24.0,1.0/24.0);
+
+	//------------------------------------------------------------------------
+
+	// Nearest emulated sample given floating point position and texel offset.
+	// Also zero's off screen.
+	vec3 Fetch(vec2 pos,vec2 off)
+	{
+		pos=floor(pos * texSize + off) / texSize;
+		if (pos.x<0.0 || pos.x>=1.0 || pos.y<0.0 || pos.y>=1.0)
+			return vec3(0.0,0.0,0.0);
+		return texture2D(u_texture,pos.xy).rgb;
+	}
+
+	// Distance in emulated pixels to nearest texel.
+	vec2 Dist(vec2 pos)
+	{
+		pos=pos * texSize;
+		return -((pos-floor(pos))-vec2(0.5));
+	}
+
+	// 1D Gaussian.
+	float Gaus(float pos,float scale)
+	{
+		return exp2(scale*pos*pos);
+	}
+
+	// 3-tap Gaussian filter along horz line.
+	vec3 Horz3(vec2 pos,float off)
+	{
+		mat3 m=mat3(Fetch(pos,vec2(-1.0,off)),
+					Fetch(pos,vec2( 0.0,off)),
+					Fetch(pos,vec2( 1.0,off)));
+		float dst=Dist(pos).x;
+		// Convert distance to weight.
+		vec3 v=vec3(Gaus(dst-1.0,hardPix),
+					Gaus(dst+0.0,hardPix),
+					Gaus(dst+1.0,hardPix));
+			// Return filtered sample.
+			return (m*v)/(v.x+v.y+v.z);
+	}
+
+	// 5-tap Gaussian filter along horz line.
+	vec3 Horz5(vec2 pos,float off)
+	{
+		vec3 a=Fetch(pos,vec2(-2.0,off));
+		vec3 b=Fetch(pos,vec2(-1.0,off));
+		vec3 c=Fetch(pos,vec2( 0.0,off));
+		vec3 d=Fetch(pos,vec2( 1.0,off));
+		vec3 e=Fetch(pos,vec2( 2.0,off));
+		float dstx=Dist(pos).x;
+		// Convert distance to weight.
+		float wa=Gaus(dstx-2.0,hardPix);
+		float wb=Gaus(dstx-1.0,hardPix);
+		float wc=Gaus(dstx+0.0,hardPix);
+		float wd=Gaus(dstx+1.0,hardPix);
+		float we=Gaus(dstx+2.0,hardPix);
+		// Return filtered sample.
+		return (a*wa+b*wb+c*wc+d*wd+e*we)/(wa+wb+wc+wd+we);
+	}
+
+	// Allow nearest three lines to effect pixel.
+	vec3 Tri(vec2 pos)
+	{
+		mat3 m=mat3(Horz3(pos,-1.0),
+					Horz5(pos, 0.0),
+					Horz3(pos, 1.0));
+		float dsty=Dist(pos).y;
+		vec3 v=vec3(Gaus(dsty-1.0,hardScan),
+					Gaus(dsty+0.0,hardScan),
+					Gaus(dsty+1.0,hardScan));
+		return m*v;
+	}
+
+	// Distortion of scanlines, and end of screen alpha.
+	vec2 Warp(vec2 pos)
+	{
+		pos=pos*2.0-1.0;
+		pos*=1.0+vec2(pos.y*pos.y,pos.x*pos.x)*warp;
+		return pos*0.5+0.5;
+	}
+
+	vec3 Mask(float x)
+	{
+		vec3 v  = clamp((fract(x)-compos)*hardMask,-1.0/3.0,1.0/3.0);
+		return 2.0/3.0+abs(v);
+	}
+
+	void main()
+	{
+		gl_FragColor.rgb = Tri(Warp(v_texCoord.xy))*Mask(v_texCoord.x*texSize.x);
+		//gl_FragColor.rgb = texture2D(u_texture,v_texCoord).rgb; // original
+		gl_FragColor.a = 1.0;
+	}
+</script>
+
+<script type="text/javascript">
+
+	p8Canvas = document.getElementById("canvas");
+	canvas = p8Canvas.cloneNode(true);
+
+	p8Canvas.name = "p8Canvas";
+	canvas.name = "canvas";
+	canvas.class = "";
+	canvas.width = p8Canvas.clientWidth;
+	canvas.height = p8Canvas.clientHeight;
+	gl = canvas.getContext('webgl');
+
+	if (gl)
+	{
+		p8Canvas.parentNode.insertBefore(canvas,p8Canvas);
+		canvas.parentNode.removeChild(p8Canvas);
+		//canvas.parentNode.style.boxShadow = "0px 0px 20px #000";
+
+		function glresize()
+		{
+			canvas.width = canvas.clientWidth;
+			canvas.height = canvas.clientHeight;
+
+			gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+			gl.uniform2f(gl.getUniformLocation(program, "u_canvasSize"), gl.canvas.width, gl.canvas.height);
+		}
+
+		window.addEventListener('load', glresize, false);
+		window.addEventListener('resize', glresize, false);
+		window.addEventListener('orientationchange', glresize, false);
+		window.addEventListener('fullscreenchange', glresize, false);
+		window.addEventListener('webkitfullscreenchange', glresize, false);//for itch.app
+
+		function compileShader(gl, source, type)
+		{
+			var shader = gl.createShader(type);
+			gl.shaderSource(shader, source);
+			gl.compileShader(shader);
+			if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+			{
+				var info = gl.getShaderInfoLog(shader);
+				throw ("could not compile shader:" + info);
+			}
+			return shader;
+		};
+
+		var vs_script = document.getElementById("some-vertex-shader");
+		var vs = compileShader(gl, vs_script.text, gl.VERTEX_SHADER);
+		var fs_script = document.getElementById("some-fragment-shader");
+		var fs = compileShader(gl, fs_script.text, gl.FRAGMENT_SHADER);
+
+		program = gl.createProgram();
+		gl.attachShader(program, vs);
+		gl.attachShader(program, fs);
+		gl.linkProgram(program);
+		if (!gl.getProgramParameter(program, gl.LINK_STATUS))
+		{
+			var info = gl.getProgramInfoLog(program);
+			throw ("shader program failed to link:" + info);
+		}
+		gl.useProgram(program)
+
+		gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+		gl.uniform3f(gl.getUniformLocation(program, "u_canvasSize"), gl.canvas.width, gl.canvas.height, 0.0 );
+
+		var texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
+		gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([1,0, 0,0, 0,1, 0,1, 1,1, 1,0]), gl.STATIC_DRAW);
+		gl.enableVertexAttribArray(texCoordLocation);
+		gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+
+		var positionLocation = gl.getAttribLocation(program, "a_position");
+		gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([1,1, -1,1, -1,-1, -1,-1, 1,-1, 1,1]), gl.STATIC_DRAW);
+		gl.enableVertexAttribArray(positionLocation);
+		gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+		gltex = gl.createTexture();
+		gl.bindTexture(gl.TEXTURE_2D, gltex);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT );
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT );
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+		gl.activeTexture(gl.TEXTURE0);
+		gl.uniform1i(gl.getUniformLocation(program, "u_texture0"), 0);
+
+		function gldraw()
+		{
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, p8Canvas);
+			gl.drawArrays(gl.TRIANGLES, 0, 6);
+			requestAnimationFrame(gldraw);
+		}
+
+		gldraw();
+	}
+</script>
+<!-- 8< -- ## GL SHADER STUFF ENDS HERE ## -- -->
+</body></html>

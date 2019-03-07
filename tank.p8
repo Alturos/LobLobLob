@@ -43,7 +43,7 @@ bloomtypes={
     0x7c7c -- blue
 }
 items={
- { ico=32, name="shell", dmg=50, spalsh=25, size=2, mag=1, duration=.065, c=8, stock = 0xFFFF, cost = 0},
+ { ico=32, name="shell", dmg=50, spalsh=25, size=2, mag=1, duration=.065, c=8, stock = 0xffff, cost = 0},
  { ico=33, name="roll ", dmg=5, spalsh=0, size=0, mag=.1, duration=.01, c=10, stock = 2, cost = 100 },
  { ico=34, name="bomb ", dmg=50, spalsh=25, size=16, mag=3.5, duration=.3, c=14, stock =  4, cost = 500 },
  { ico=53, name="leap ", dmg=50, spalsh=25, size=6, mag=2, duration=.075, c=11, stock = 4, cost = 100 },
@@ -261,7 +261,7 @@ function _update60()
 end
 
 function updatebullets()
- for i=#bullets,1,0xFFFF do
+ for i=#bullets,1,0xffff do
   local b,hit,cancel,itm = bullets[i], false, false
   if(b.sub) itm = subitems[b.id]
   if(not b.sub) itm = items[b.id]
@@ -324,10 +324,10 @@ function updatebullets()
     if(dist <= defl_r and (t!=ct or b.life > 10)) then
      -- hit deflector, calculate bounce
      local normal = v_normalized(diff)
-     local vel = v_new(b.velx,b.vely * 0xFFFF)
+     local vel = v_new(b.velx,b.vely * 0xffff)
      local dot = v_dot(vel, normal)
      local newvel = v_add(v_mult(normal,-2*dot), vel)
-     local newpos = v_add(t, v_mult(normal, (defl_r+1) * 0xFFFF))
+     local newpos = v_add(t, v_mult(normal, (defl_r+1) * 0xffff))
      b.velx = newvel.x
      b.vely = newvel.y
      b.x = newpos.x
@@ -384,7 +384,7 @@ function updatebullets()
 end
 
 function updateblooms(firing)
- for i=#blooms,1,0xFFFF do
+ for i=#blooms,1,0xffff do
   local bl = blooms[i]
   if(bl.focus) camtarget = bl
   if(bl.time < 21 or not firing) bl.time += 1
@@ -450,7 +450,7 @@ function updateplane()
  if(not plactive) return
  camtarget = v_new(plx, ply+40)
  local velx = plspeed * step
- if(not plflip) velx *= 0xFFFF
+ if(not plflip) velx *= 0xffff
  plx += velx
  pltime += 1
  if((plflip and plx > fieldwidth + 32) or (plx < -32 and not plflip)) then
@@ -468,7 +468,7 @@ function updateplane()
   plopen = true
   plbtime -= 1
   local bsp = plspeed
-  if(not plflip) bsp *= 0xFFFF
+  if(not plflip) bsp *= 0xffff
   if(plbtime < 1 and plbombcount > 0) then
    plbtime = 20 
    addbomb(plbayx + 2, ply + 16, bsp, 0, plflip, 2) 
@@ -591,7 +591,7 @@ function updatedeath()
  -- finish explosions before doing anything else.
  if(#blooms > 0) return
  local falling,dying = false,false
- for i=#tanks, 1, 0xFFFF do
+ for i=#tanks, 1, 0xffff do
   local t=tanks[i]
   local fl,y=heightmap[flr(t.x)+5], flr(t.y) + 8
   local fdist,h = gravity * step, fl - y
@@ -609,7 +609,7 @@ function updatedeath()
  fallscalcd = true
  if(falling) return
  local mdc=52
- for i=#tanks, 1, 0xFFFF do
+ for i=#tanks, 1, 0xffff do
   local t=tanks[i]
   if(t.falld and t.falld > 0) t.health -= t.falld t.falld = 0
   if(t.fell) t.fell=false t.chute = false
@@ -661,7 +661,7 @@ function updatetitle()
   end
  elseif(btnp(4) or btnp(5)) then
   titlefade = true
-  music(0xFFFF, 144)
+  music(0xffff, 144)
   sfx(63)
  end
 end
