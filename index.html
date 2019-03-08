@@ -69,7 +69,13 @@
     /* ------ pico8 control buttons [reset] [pause] [mute] ------ */
     .pico8_btns { text-align: center; }
 	.hidden { display: none; }
-    .pico8_el { width:82px; display:inline-block; margin: 1px; padding: 4px; text-align: center; color:#fff; background-color:#777; font-size: 9pt; cursor: pointer; }
+    .pico8_el { width:82px; display:inline-block; margin: 1px; padding: 4px; text-align: center; color:#fff; background-color:#777; font-size: 9pt; cursor: pointer;
+    -webkit-touch-callout: none; /* iOS Safari */
+    -webkit-user-select: none; /* Safari */
+     -khtml-user-select: none; /* Konqueror HTML */
+       -moz-user-select: none; /* Firefox */
+        -ms-user-select: none; /* Internet Explorer/Edge */
+            user-select: none; }
     .pico8_el a{ text-decoration: none; color:#fff; }
     .pico8_el:hover{ background-color:#aaa; }
     .pico8_el:link{ background-color:#aaa; }
@@ -90,8 +96,8 @@
 		top: 25%;
 		outline: none;
 		cursor: pointer;
-		background-color: #2de800; 
-		color: #ffffff; 
+		background-color: #00E436; 
+		color: #FFF1E8; 
 		width: 80px; 
 		border: 1px solid rgba(0,0,0,0.1);
 		border-radius: 3px; 
@@ -102,7 +108,7 @@
 		z-index: 2;}
 	
 	.runButton:hover {
-		background-color: #57AA3D;
+		background-color: #008751;
 	}
   </style>
 
@@ -157,7 +163,8 @@
       Module = {canvas: canvas};
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-	Module.noInitialRun = true;
+  Module.noInitialRun = true;
+  useGlEffect = true;
     // ------ BLOCK CURSOR-KEYS FROM SCROLLING ------
     var onKeyDown_blocker= function(event) {
       event = event || window.event;
@@ -203,6 +210,8 @@
       <img
         src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAXklEQVR4Ae2doQ4AIQxD4YLH8v9fh+ULhjpxxSwLg2uyapr1JRu1iV5Z+1BGl4+xNpX38SYo2uRvYiT5LwEmt+ocgXVLrhPEgBiw8Q5w7/kueSkK+D2tJO4E/I3GrwkqQCBabEj/4QAAABB0RVh0TG9kZVBORwAyMDExMDIyMeNZtsEAAAAASUVORK5CYII="
         alt="Toggle Sound" width=12 height=12/> Sound</div>
+    <div class="pico8_el" onclick="toggleCanvas();">
+      CRT Efffect</div>
   </div>
 </div>
 
@@ -685,7 +694,7 @@
 	canvas.height = p8Canvas.clientHeight;
 	gl = canvas.getContext('webgl');
 
-	if (gl)
+	if (gl && useGlEffect)
 	{
 		p8Canvas.parentNode.insertBefore(canvas,p8Canvas);
 		canvas.parentNode.removeChild(p8Canvas);
@@ -766,8 +775,27 @@
 			requestAnimationFrame(gldraw);
 		}
 
+    
+
 		gldraw();
-	}
+  }
+  
+  function toggleCanvas() {
+      if(!gl) return;
+      if(useGlEffect) {
+        p8Canvas.name = "canvas";
+	      canvas.name = "p8Canvas";
+        canvas.parentNode.insertBefore(p8Canvas,canvas);
+		    p8Canvas.parentNode.removeChild(canvas);
+      }
+      else {
+        p8Canvas.name = "p8Canvas";
+	      canvas.name = "canvas";
+        p8Canvas.parentNode.insertBefore(canvas,p8Canvas);
+		    canvas.parentNode.removeChild(p8Canvas);
+      }
+      useGlEffect = !useGlEffect;
+    }
 </script>
 <!-- 8< -- ## GL SHADER STUFF ENDS HERE ## -- -->
 </body></html>

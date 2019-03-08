@@ -105,7 +105,7 @@ function initTouchButtons() {
         };
 
     }());
-    changeButtonset(2); // set starting buttonset!
+    changeButtonset(1); // set starting buttonset!
 
     var updatePressedClasses = (function() {
           var target = document.getElementById("btns-markPressed");
