@@ -7,7 +7,7 @@ __lua__
 -- known bugs:
 -- engine sound plays forever when moving at end of turn
 -- camera doesn't track to next player after death
-
+cartdata"bmg_lobloblob"
 title, pregame, aim, move, shop, movecam, select, firing, death, postgame, logo = 0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512
 state,nextstate,camtarget,camfocus = logo,logo
 fieldwidth,raidbombs,players,cpus,activetank,logotimer,step=256,3,4,3,1,0,1/60
@@ -22,7 +22,7 @@ bloomtypes={
     0x7c7c -- blue
 }
 items={
- { ico=32, name="shell", dmg=50, spalsh=25, size=2, mag=1, duration=.065, c=8, stock = 0xffff, cost = 0},
+ { ico=32, name="shell", dmg=50, spalsh=25, size=3, mag=1, duration=.065, c=8, stock = 0xffff, cost = 0},
  { ico=33, name="roll ", dmg=5, spalsh=0, size=0, mag=.1, duration=.01, c=10, stock = 2, cost = 100 },
  { ico=34, name="bomb ", dmg=50, spalsh=25, size=16, mag=3.5, duration=.3, c=14, stock =  4, cost = 500 },
  { ico=53, name="leap ", dmg=50, spalsh=25, size=6, mag=2, duration=.075, c=11, stock = 4, cost = 100 },
@@ -86,7 +86,7 @@ function resetround()
  plbombcount=raidbombs
  initmap()
  for i=1,#tanks,1 do
-  local t,x = tanks[i],(fieldwidth-24)/players*i
+  local t,x = tanks[i],flr((fieldwidth-24)/players*i)
   t.deathclock = 0
   t.deflector = false
   t.shield = false
@@ -105,7 +105,6 @@ function resetround()
    grassmap[t.x+i] = heightmap[t.x+i] + 3
    grassmap[lx] = heightmap[lx] + 3
    grassmap[rx] = heightmap[rx] + 3
-
   end
  end
  music"8"
@@ -115,6 +114,7 @@ function initgame()
  colourlist={1,2,3,4,5,6,7,8,9,10,11}
  tanks={}
  cpus = mid(0, cpus, players)
+ dset(0,2) dset(1,players) dset(2,cpus) dset(3,mapsize)
  --here we add tanks based on game mode
  for i=players,1,-1 do
   local team = colourlist[rndi(#colourlist)+1]
@@ -164,7 +164,7 @@ function initmap()
   add(keypoints, rndi(112-48) + 48)
  end
  for x=1,fieldwidth do
-  y = mid(127, 48, lerp(keypoints[k], keypoints[k+1], cstep/hstep))
+  y = flr(mid(127, 48, lerp(keypoints[k], keypoints[k+1], cstep/hstep)))
   add(heightmap, y)
   add(grassmap, y+3)
   --create rock table for each column
@@ -316,6 +316,7 @@ function updatebullets()
     if (ct != t or b.life > 10) and (dist <= 2 or (b.x >= t.x and b.x < (t.x + 7) and b.y > (t.y + 3) and b.y < (t.y + 8))) then
      -- hit tank, explode
      t.health -= itm.dmg
+     ct.hittarget = true
      if(t != ct) ct.cash += itm.dmg * 10
      hit = true
     end
@@ -331,6 +332,7 @@ function updatebullets()
       hit = true
   end
   if hit then
+   ct.lastshot = b
    del(bullets, b)
    if itm.name == "araid" then
     plactive = true
@@ -343,8 +345,7 @@ function updatebullets()
     plbombcount=raidbombs
     sfx(61,3)
     if(b.x > 128) plflip = true plx = -32
-   end
-   if itm.name == "roll " then
+   elseif itm.name == "roll " then
     addbomb(b.x,b.y,b.velx*.25,0,false,1)
    elseif itm.name == "leap " and not b.split then
     local b = addbullet(b.x, b.y -6, b.velx, max(2.5,abs(b.vely)) * -1.1, b.id, b.c)
@@ -514,12 +515,21 @@ function updateaim()
  message="aim"
  local pw,ang,x,y = 0,0,0,0,0,0
  if ct.cpu then
-  local target = picknexttank()
-  local times,vec = calc_shots(tanks[target])
-  if(#times > 0)  then
-   vec = calc_shotvel(tanks[target],times[rndi(#times)+1])
-   setcannon(vec)
-   nextstate = firing
+  if not ct.target or ct.target.health < 1 then
+   -- pick new target
+   ct.target = randomtank()
+   setupshots()
+  elseif ct.hittarget then
+   -- hit last time fire again, todo: track movement
+   setupfire()
+  else
+   -- we have a target, and we missed it, adjust and try again
+   local dif,a = ct.target.x - ct.lastshot.x, ct.angle
+   local absdif = abs(dif)
+   if absdif >= 16 and ct.hishot then ct.angle = ct.hishot ct.hishot = nil
+   elseif(dif > 0 and a < 90) or (dif < 0 and a > 90) then ct.power += rndi(abs(dif) / 2) + 1
+   else ct.power -= rndi(absdif / 2) + 1 end
+   setupfire()
   end
  else
   if (btn"2") pw += 1
@@ -528,14 +538,11 @@ function updateaim()
   if (btn"1") ang -= 1
   ct.power = mid(0, 100, ct.power + pw)
   ct.angle = mid(0, 180, ct.angle + ang)
-  ct.ax = cos(ct.angle/360)
-  ct.ay = sin(ct.angle/360)
   if(btnp"4") nextstate = movecam
   if(btnp"5") nextstate = firing
  end
-
-
-
+ ct.ax = cos(ct.angle/360)
+ ct.ay = sin(ct.angle/360)
  if nextstate == firing then
   if(ct.stock[ct.item] > 0) ct.stock[ct.item] -= 1
   local x = ct.x + ct.ox--4-- + (5 * ct.ax)
@@ -546,8 +553,34 @@ function updateaim()
  end
 end
 
+function setupfire()
+ ct.lastshot = nil
+ ct.hittarget = false
+ nextstate = firing
+end
+
+function setupshots()
+ shots,powers,power = {},{80,75,60,55,35,45,90,25,16,40,50}
+ while not shots.low and not shots.hi do
+  power = powers[rndi(#powers)+1]
+  shots = calc_arc(v_mult(ct, .1), power * .1, v_mult(ct.target, .1), gravity * .1)
+ end
+ local ang = shots.low
+ if not shots.low or abs(ct.target.y - ct.y) > 12 or  rndi"2" == 1 then ang = shots.hi
+ else ct.hishot = shots.hi end
+ ct.power = power
+ ct.angle = round(ang * 360)
+ setupfire()
+end
+
+function conv_angle(ang, pow)
+ local vec = v_new(cos(ang) * pow, 0xffff * sin(ang) * pow)
+ return atan2(vec.x,vec.y)
+end
+
 function updatefiring()
  message="firing"
+ if(ct.cpu and ct.target) message = "firing at " .. teams[ct.target.team].name
  camtarget = nil
  updatebullets()
  updateblooms(true)
@@ -563,6 +596,7 @@ end
 
 function updatedeath()
  -- handle any post death 'splosions
+ if(ct.cpu and ct.target) message = "firing at " .. teams[ct.target.team].name
  camtarget = nil
  updatebullets()
  updateblooms(false)
@@ -591,6 +625,7 @@ function updatedeath()
  local mdc=52
  for i=#tanks, 1, 0xffff do
   local t=tanks[i]
+  t.y = flr(t.y)
   if(t.falld and t.falld > 0) t.health -= t.falld t.falld = 0
   if(t.fell) t.fell=false t.chute = false
   if(t.y>121) t.health = 0 --tank fell off the map
@@ -610,7 +645,7 @@ function updatedeath()
  end
  if(mdc > 51) dying = false
  if(dying) return
-
+ message = nil
  if statetime == 90 then
   activetank = picknexttank()
   ct = tanks[activetank]
@@ -659,6 +694,7 @@ function updatetitle()
 end
 
 function wrappedvalue(val, min, max)
+ if(not val) return
  if(val > max) val = min
  if(val < min) val = max
  return val
@@ -696,7 +732,7 @@ function updateshop()
   message="shop $" .. ct.cash --"select item"
   if titlefade then
    statetime += 1
-   if(statetime > 72) statetime = 72 nextstate = pregame resetround() titlefade = false
+   if(statetime > 72) statetime = 72 nextstate = pregame resetround()
   end
   updateitemmenu()
   if btnp"5" then
@@ -733,7 +769,7 @@ end
 
 function updatepregame()
  statetime -= 1
- camtarget = tanks[1]
+ camtarget = ct
  if statetime < -32 then
   statetime = 0
   titlefade = false
@@ -745,7 +781,7 @@ function updatepostgame()
  statetime += 1
  if statetime > 72 then
   statetime = 72
-  if(btnp"4" or btnp"5") nextstate = shop activetank = 1
+  if(btnp"4" or btnp"5") nextstate = shop activetank = 1 shopitem = 1
  end
 end
 
@@ -1024,6 +1060,7 @@ function drawlogo()
   nextstate = title
   titlefade = false
   statetime = 0
+  if(dget"0" > 0) players = dget"1" cpus = dget"2" mapsize = dget"3"
   sfx(0xFFFF,0)
   music"0"
   cls()
@@ -1114,6 +1151,15 @@ function picknexttank()
  return at
 end
 
+function randomtank()
+ local t
+ while not t do
+  local tk = tanks[rndi(#tanks)+1]
+  if(tk != ct and tk.health > 0) t = tk
+ end
+ return t
+end
+
 function useitem()
  local used,st,itm=false,firing,items[ct.item]
  if ct.stock[ct.item] == 0 then
@@ -1145,9 +1191,9 @@ function v_len(x, y)
   return sqrt(n*n + 1) * d
 end
 
-function v_subtr(a,b)
- return v_new((b.x + (b.ox or 0)) - (a.x + (a.ox or 0)),
- (b.y + (b.oy or 0)) - (a.y + (a.oy or 0)))
+function v_subtr(source,target)
+ return v_new((target.x + (target.ox or 0)) - (source.x + (source.ox or 0)),
+ (target.y + (target.oy or 0)) - (source.y + (source.oy or 0)))
 end
 
 function v_normalized(v)
@@ -1172,30 +1218,29 @@ function v_add(a,b)
  return v_new((b.x + (b.ox or 0)) + (a.x + (a.ox or 0)), (b.y + (b.oy or 0)) + (a.y + (a.oy or 0)))
 end
 
-function calc_shots(target)
- local diffp,acc,times=v_mult(v_subtr(v_new(target.x,target.y + 4),ct),.1),v_new(0,gravity/10),{}
- local accdot,dpdot,b1=v_dot(acc,acc),v_dot(diffp,diffp),v_dot(diffp,acc) + 100 -- max_pow^2 * .1
- local disc = sqrt(b1*b1 - accdot * dpdot)
- if disc > 0 then -- otherwise, out of range
-  add(times, sqrt((b1 - disc) * 2 / accdot)) -- min time
-  add(times, sqrt((b1 + disc) * 2 / accdot)) -- max time
-  add(times, sqrt(sqrt(2*dpdot/accdot))) -- lowest power time
+ function calc_arc(proj_pos, proj_speed, target, grav)
+  local diff,slns = v_subtr(proj_pos, target),{}
+  local diff_x = v_new(diff.x, 0)
+  local grounddist = diff_x.x
+
+  local speed2 = proj_speed*proj_speed
+  local speed4 = proj_speed*proj_speed*proj_speed*proj_speed
+  local y = diff.y
+  local x = grounddist
+  local gx = grav*x
+  local root = speed4 - grav*((grav*x*x) + (y*speed2))
+
+  -- no solution
+  if (root < 0) return {}
+
+  root = sqrt(root)
+
+  lowang = conv_angle(atan2(gx, speed2 - root), proj_speed)
+  highang = conv_angle(atan2(gx, speed2 + root), proj_speed)
+  if(lowang * 360 < 181) slns.low = lowang
+  if (lowang != highang and highang * 360 < 181) slns.hi = highang
+  return slns
  end
- return times
-end
-
-function calc_shotvel(target,t)
- local diffp = v_subtr(target,ct)
- return v_new(diffp.x / t-0, diffp.y / t - gravity * t / 2)
-end
-
-function setcannon(vec)
- local norm = v_normalized(vec)
- ct.power = v_len(vec.x, vec.y)
- ct.angle = round(atan2(-norm.x, norm.y) * 360)
- ct.ax = norm.x * 0xFFFF
- ct.ay = norm.y
-end
 
 function setcam()
  camera(cam.x+offset_x, cam.y+offset_y)
