@@ -1,7 +1,7 @@
 pico-8 cartridge // http://www.pico-8.com
-version 16
+version 17
 __lua__
--- lob lob lob! a tank game
+-- lob lob lob! - a tank game
 -- bright moth games
 
 -- known bugs:
@@ -26,7 +26,7 @@ items={
  { ico=33, name="roll ", dmg=5, spalsh=0, size=0, mag=.1, duration=.01, c=10, stock = 2, cost = 100 },
  { ico=34, name="bomb ", dmg=50, spalsh=25, size=16, mag=3.5, duration=.3, c=14, stock =  4, cost = 500 },
  { ico=53, name="leap ", dmg=50, spalsh=25, size=6, mag=2, duration=.075, c=11, stock = 4, cost = 100 },
- { ico=49, name="lazr ", dmg=75, spalsh=0, c=9, cost = 750, stock = 1 },
+ { ico=49, name="lazr ", dmg=85, spalsh=0, c=9, cost = 750, stock = 1 },
  { ico=50, name="mirv ", dmg=25, spalsh=50, size=8, mag=2, duration=.095, c=15, cost = 750},
  { ico=40, name="araid", dmg=0, splash=0, size=0, mag=0, duration=.095, c=7, stock = 1, cost = 2000},
  { ico=35, name="shld ", stock = 1, cost = 250 },
@@ -176,14 +176,15 @@ function initmap()
  end
 end
 
-function addbloom(type, x, y, size, dmg)
+function addbloom(type, x, y, size, dmg, focus)
  return add(blooms, {
      type=type,
      x=x,
      y=y,
      time=0,
      size=size,
-     dmg=dmg
+     dmg=dmg,
+     focus=focus
  })
 end
 
@@ -371,8 +372,7 @@ function updateblooms(firing)
    if ct.tpbls == bl then
     local dest = mid(6, (rndi(fieldwidth) + 1) * 2 % fieldwidth, fieldwidth-6)
     sfx"51"
-    ct.tpblt = addbloom(3, dest, heightmap[dest]-4,6,0)
-    ct.tpblt.focus = true
+    ct.tpblt = addbloom(3, dest, heightmap[dest]-4,6,0,true)
     ct.x = -9
     ct.tpbls = nil
    elseif ct.tpblt == bl then
@@ -1182,7 +1182,7 @@ function firelaser()
  local sx,sy,ax,ay = ct.x + ct.ox + ct.ax * 6, ct.y + 2 + ct.ay * 6, ct.ax, ct.ay
  sfx"50"
  for i = 1, 256, 1 do
-  addbloom(2, sx + ax * i, sy + ay * i, 1, items[5].dmg)
+  local b = addbloom(2, sx + ax * i, sy + ay * i, 1, items[5].dmg, i==129)
  end
  addbloom(3, sx, sy, 3, 0)
 end
