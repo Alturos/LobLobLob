@@ -7,6 +7,29 @@ __lua__
 -- known bugs:
 -- engine sound plays forever when moving at end of turn
 -- camera doesn't track to next player after death
+
+--Playtest notes:
+--Menu/gameplay:
+--Maybe add a # of rounds, and declare a winner (probably by total kills, total cash for tie breaking)
+
+--Weapons:
+--Shield - most of the time I shot the inside of my own shield.
+--Air raid - really misses most of the time. perhaps the bombs need to fall more directly on the target point.
+
+--AI:
+--Sometimes the AI tries to shoot you through the other side of the screen. Making them a sitting duck.
+--Sometimes they just shoot themselves. I don't know what's happening there.
+
+--Buy rounds:
+--The money is way too much. Cut rewards in half at the least.
+--AI should spend their own money. Just have them buy the most expensive thing they can afford until they're broke.
+
+--QOL if tokens allow:
+--Different music for the buy store?
+--Otherwise, holy shit is this game fun. I felt I could genuinely play against the AI and I didn't always win. So that's great. Obviously if the AI used more of the crazy weapons that'd be fun, but still, it's pretty solid for a prerelease candidate.
+--Selectable start colour
+
+
 cartdata"bmg_lobloblob"
 title, pregame, aim, move, shop, movecam, select, firing, death, postgame, logo = 0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512
 state,nextstate,camtarget,camfocus = logo,logo
@@ -15,7 +38,7 @@ far_l,far_r,shield_r,defl_r,offset,offset_x,offset_y,shakemag=0,128,8,6,0,0,0,2
 titleidx,titletime,bgframe,statetime,camspeed,tankspeed,gravity,titlefade = 1,1,0,0,90,10,30,false
 text="in the year 30xd, there were... a bunch of tanks... that started... fighting!"
 
-startcolours,mapsizes,mapsize = { 7, 7, 7, 6, 13, 6}, {"small","medium","large"}, 2
+startcolours,mapsizes,mapsize,bolttime = { 7, 7, 7, 6, 13, 6}, {"small","medium","large"}, 2, 60
 bloomtypes={
     0x028e, --red
     0x289a, --yellow/orange
@@ -23,7 +46,7 @@ bloomtypes={
 }
 items={
  { ico=32, name="shell", dmg=50, spalsh=25, size=3, mag=1, duration=.065, c=8, stock = 0xffff, cost = 0},
- { ico=33, name="roll ", dmg=5, spalsh=0, size=0, mag=.1, duration=.01, c=10, stock = 2, cost = 100 },
+ { ico=33, name="bolt ", dmg=0, spalsh=0, size=0, mag=.1, duration=.01, c=10, stock = 2, cost = 100 },
  { ico=34, name="bomb ", dmg=50, spalsh=25, size=16, mag=3.5, duration=.3, c=14, stock =  4, cost = 500 },
  { ico=53, name="leap ", dmg=50, spalsh=25, size=6, mag=2, duration=.075, c=11, stock = 4, cost = 100 },
  { ico=49, name="lazr ", dmg=85, spalsh=0, c=9, cost = 750, stock = 1 },
@@ -64,7 +87,6 @@ function _init()
     v_new(60,28)
  }
  subitems={
-    {name="roller", dmg=75, splash=25, size=6, mag=2, duration=.075, id=33, offsets={v_new(-4,-7)} },
     {name="bomb", dmg=50, splash=75, size=10, mag=3, duration=.095, id=24, offsets={v_new(0,-4),v_new(0,-6),v_new(-4,-7)} }
  }
 end
@@ -197,8 +219,33 @@ end
 
 function addbomb(x,y,velx,vely,flip,id)
  return add(bullets, {
-     sub=true, id=id, x=x, y=y, velx=velx, vely=vely, flip=flip, frame=0, time=0, roll=id==1, life=0
+     sub=true, id=id, x=x, y=y, velx=velx, vely=vely, flip=flip, frame=0, time=0, life=0
  })
+end
+
+function spawnbolt(vec)
+ bolt={}
+ cloud={}
+ bolttime=0
+ local x,y,xo,yo=vec.x,vec.y,4,6
+ for i=0,10,1 do
+	 local off,ly=flr(rnd(xo+3))
+	 if(rnd(1) >.5) off = off * -1
+	 local seg={}
+	 add(seg,{x,y,x+off,y-yo})
+	 x+=off
+	 y-=yo
+	 add(seg,{x,y,x+off,y+(yo/2)})
+	 add(bolt, seg)
+  end
+  for i=0,10,1 do
+   local lx=x-15+(i*3)
+		add(cloud,{lx,y})
+	 if i%2 == 1 then
+	  add(cloud,v_new(lx,y+rnd(3)))
+	  add(cloud,v_new(lx,y-rnd(6)))
+	 end
+	end
 end
 
 -->8
@@ -246,24 +293,10 @@ function updatebullets()
   if(not b.sub) itm = items[b.id]
   camtarget = b
   local lvy = b.vely
-  if b.roll then
-   if(b.x < 0) b.x = 0
-   if(b.x > fieldwidth - 1) b.x = fieldwidth
-   local bx = flr(b.x)
-   local l,c,r = (heightmap[bx] or 0), heightmap[bx+1], (heightmap[bx+2] or 0)
-   if (c > l and c > r) or abs(b.velx) <= step then b.velx = 0
-   elseif c == l and c == r then b.velx *= .85
-   elseif l > c then b.velx = -10
-   elseif r > c then b.velx = 10 end
-
-   if flr(b.y) < c then b.vely += gravity * step
-   else b.vely = 0 end
-  else
-   b.vely += gravity * step
-   b.px = b.x
-   b.py = b.y
-  end
-  if b.sub and b.id == 2 then
+  b.vely += gravity * step
+  b.px = b.x
+  b.py = b.y
+  if b.sub and b.id == 1 then
    if(b.vely > 20) b.frame = 1
    if(b.vely > 50) b.frame = 2
   end
@@ -325,9 +358,7 @@ function updatebullets()
    if(t.shp < 1) t.shield = false t.deflector = false
    if(hit) break
   end
-  if b.roll then
-   if(b.velx == 0 and b.vely == 0) hit = true
-  elseif b.x < 0 or b.x >= fieldwidth
+  if b.x < 0 or b.x >= fieldwidth
      or b.y >= heightmap[flr(b.x)+1]
      or b.y > 128 then
       hit = true
@@ -346,8 +377,8 @@ function updatebullets()
     plbombcount=raidbombs
     sfx(61,3)
     if(b.x > 128) plflip = true plx = -32
-   elseif itm.name == "roll " then
-    addbomb(b.x,b.y,b.velx*.25,0,false,1)
+   elseif itm.name == "bolt " then
+    spawnbolt(b)
    elseif itm.name == "leap " and not b.split then
     local b = addbullet(b.x, b.y -6, b.velx, max(2.5,abs(b.vely)) * -1.1, b.id, b.c)
     b.split = true
@@ -450,7 +481,7 @@ function updateplane()
   if(not plflip) bsp *= 0xffff
   if plbtime < 1 and plbombcount > 0 then
    plbtime = 20 
-   addbomb(plbayx + 2, ply + 16, bsp, 0, plflip, 2) 
+   addbomb(plbayx + 2, ply + 16, bsp, 0, plflip, 1) 
    plbombcount-=1
    sfx"60"
   end
@@ -458,6 +489,11 @@ function updateplane()
   if(plopen) sfx"58"
   plopen=false
  end
+end
+
+function updatebolt()
+ if(bolttime < 60) bolttime+=1
+ if(bolttime == 30) local seg = bolt[1][1] addbloom(1, seg[1], seg[2], 4, 50) setshake(2.5,.3)
 end
 
 function updatemovecam()
@@ -586,6 +622,7 @@ function updatefiring()
  updatebullets()
  updateblooms(true)
  updateplane()
+ updatebolt()
  if #bullets<1 and not plactive then
   nextstate = death
   -- in case the plane is still doing a noise
@@ -602,6 +639,7 @@ function updatedeath()
  updatebullets()
  updateblooms(false)
  updateplane()
+ updatebolt()
  local deadcount = 0
  -- finish explosions before doing anything else.
  if(#blooms > 0) return
@@ -907,12 +945,24 @@ function drawgame()
    line(plbayx+6, ply+14, plbayx+6, ply+16, 5)
   end
  end
+ if bolttime<60 then
+  if(bolttime>20 and bolttime < 38) then
+	 for i=#bolt,max((#bolt-(bolttime-20)),1),-1 do
+	  local v=bolt[i]
+	  line(v[1][1],v[1][2],v[1][3],v[1][4],10)
+	  line(v[2][1],v[2][2],v[2][3],v[2][4],10)
+	 end
+  end
+  for i=max(1,-40+bolttime),min(bolttime,#cloud), 1 do
+    local v=cloud[i]
+    circfill(v.x,v.y,4,5)
+  end
+ end
  for b in all(bullets) do
   if b.sub then
    local itm=subitems[b.id]
    local sid,offs = itm.id + b.frame, itm.offsets[b.frame+1]
-   if b.id == 1 then circfill(b.x, b.y, 2, 7)
-   else spr(sid, b.x+offs.x, b.y+offs.y, 1, 1, b.flip) end
+   spr(sid, b.x+offs.x, b.y+offs.y, 1, 1, b.flip)
   else
    pset(flr(b.px), flr(b.py),6)
    pset(flr(b.x),flr(b.y),b.c)
@@ -1321,13 +1371,13 @@ e8eee28208282250ccf9afcc00000000000000000000d0000000055550000000055d142055dd0000
 d222d5d0525d0000c1dddd1c005e8500000000000d00ce5554442130000008800000000000000000000500000080090a09a0000009a0000000000080ee444210
 05d500000d000000cc1111cc00dd6d00000000000f0fd8664442130022007e88000000000000000000000000000099000090900000000000000a0000fff94210
 cccccccccccccccccccccccccccccccc000000000ce5b832222130022220e7e8cccc6558000000000900008000008900a0900000800000090000009000033000
-cccccccccccddcccccc6688ccaaaaaac000000d6fd86a6442213555551118e7ec655638e0008080080000a08000880000a009008000000000000009003533530
-c6d668ccccd77dccc6d77ee8c9d77dac00d75d675b83d34211159988944188e72d5335110088e0000998e9900a08880000008800000900000000000035333353
-c7d77eecc57987dcc7d77eeec967769c0d6739393a5551111133338931122880c11111cc0889ae800a89ae00000000099008800000000000000000003535d353
-c656688cc568975cc656688ec9d66d9c025393939d33d22222d3333332220000cc68cccc88a99e8e889a9a8e000009000000a000080000000000000035d5bd53
-c656681cc156651cc6566888c196691c56d22223333364444663332220000000cc11cccc28298a82289aa2820000d00000000000088800a0009008805db5bbd5
-c11111cccc1551ccc1166881cc1991cc00000002222255555552225000000000cccc68ccd22a2225da2922a500d00500a0d0d5d0008800000000000005050050
-ccccccccccc11cccccc1111cccc11ccc00000000000000000000550000000000cccc11cc05d5d5d005d5d5d0000d005005005d000d500050005dd05d05050050
+cccccccccc5c55ccccc6688ccaaaaaac000000d6fd86a6442213555551118e7ec655638e0008080080000a08000880000a009008000000000000009003533530
+c6d668ccc555555cc6d77ee8c9d77dac00d75d675b83d34211159988944188e72d5335110088e0000998e9900a08880000008800000900000000000035333353
+c7d77eecc555555cc7d77eeec967769c0d6739393a5551111133338931122880c11111cc0889ae800a89ae00000000099008800000000000000000003535d353
+c656688cccc9acccc656688ec9d66d9c025393939d33d22222d3333332220000cc68cccc88a99e8e889a9a8e000009000000a000080000000000000035d5bd53
+c656681ccc9accccc6566888c196691c56d22223333364444663332220000000cc11cccc28298a82289aa2820000d00000000000088800a0009008805db5bbd5
+c11111cccc9accccc1166881cc1991cc00000002222255555552225000000000cccc68ccd22a2225da2922a500d00500a0d0d5d0008800000000000005050050
+ccccccccccc9acccccc1111cccc11ccc00000000000000000000550000000000cccc11cc05d5d5d005d5d5d0000d005005005d000d500050005dd05d05050050
 cccc8ccccccccccccccccccccce7e7cccccccccccccccccc0a9009a056000d600003d000004004000000000000000000000000000000000000000000005dd500
 cccc7ccccc67ccccc8eccccccee66e7ccefd35cccccccccca000000a5d6005605d0d300005404500000000000000000000000000000000000000000096969454
 cddc6cccc6ff7c7cc8866cccee666ee7c11f115c66ccc82c900000092560022053033000045040400000000000000000000155000000000000000000979794d4
@@ -1337,13 +1387,13 @@ cd22edcccc25ccccccc7c8cccc6996cccc35335cccc7cccc900000095d6000d6000d3d3500545000
 c352edcccce6ccccccc8c1ccccc11ccccc33335ccccccccca000000a55d600220003335000054000d5d6dd65444f94f905d65d60006d505d505d505d00000000
 c11111ccc5555cccccc1cccccccccccccc11111ccccccccc0a9009a00222000000033000005544005d5dd55d5449f59f01551550d500d50d050d050d00000000
 cccccccc00000000000000000000000000000000cccccccc0000000aa7710000000000449aa771000000000aaaa771000000000aa7710000ccccccc8cccccccc
-cccccccc00000000000000000000000000000000cccccccc0000009aaa7200000000049aaaaaa7100000009aaaaaa7100000009aaa720000ccccccc98ccccccc
-cccccccc00000000000000000000016100000000cccccccc000000aaf6a2000000004aaffffffaa1000000aaaaaffa20000000aaf6a20000ccccccfa9fcccccc
-cccccccc00000000000000000000d606008e0000cccccccc000009aaa621000000009aaa444aafa2000009aa944aaf20000009aaa621000005cccc7777cccc50
-cccccccc0000000000000000000d676d00826000cccccccc00005aff662000000005aaf91129fa6200005aff222ff41000005aff662000000005c07ff70c5000
-cccccccc000000000000000000d67dd000067600cccccccc00004aaa621000000004aa620059a66200004aa91099620000004aaa621000000600500ff0050060
-cccccccc00022222002222201d6dd10000005750cccccccc0005fff662000000005fff61004ff6210005ffffffff42000005fff6620000005002050440502005
-cccccccc2224242222888e22d6dd0000000005a0cccccccc00049faf210000000049f6200599f6200004999999f5210000049faf210000006506005dd5006056
+cccddccc00000000000000000000000000000000cccccccc0000009aaa7200000000049aaaaaa7100000009aaaaaa7100000009aaa720000ccccccc98ccccccc
+ccd77dcc00000000000000000000016100000000cccccccc000000aaf6a2000000004aaffffffaa1000000aaaaaffa20000000aaf6a20000ccccccfa9fcccccc
+c57987dc00000000000000000000d606008e0000cccccccc000009aaa621000000009aaa444aafa2000009aa944aaf20000009aaa621000005cccc7777cccc50
+c568975c0000000000000000000d676d00826000cccccccc00005aff662000000005aaf91129fa6200005aff222ff41000005aff662000000005c07ff70c5000
+c156651c000000000000000000d67dd000067600cccccccc00004aaa621000000004aa620059a66200004aa91099620000004aaa621000000600500ff0050060
+cc1551cc00022222002222201d6dd10000005750cccccccc0005fff662000000005fff61004ff6210005ffffffff42000005fff6620000005002050440502005
+ccc11ccc2224242222888e22d6dd0000000005a0cccccccc00049faf210000000049f6200599f6200004999999f5210000049faf210000006506005dd5006056
 000000552442222882888fe5d5d00000cccccccca00000000059996f20000000059996100499621000599992299910000059996f20000000c65000522500056c
 00000515522222288f2288855d000000cccccccc00000000004996f21000000004996200599962000049962109992000002996f2100000009465565665655649
 000051112522228888e2288820000000cccccccc09000000059996f20000000049996100499f210005999510499f20000522222200000000ac00602dd20600ca
