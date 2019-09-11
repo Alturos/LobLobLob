@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 17
+version 18
 __lua__
 -- lob lob lob! - a tank game
 -- bright moth games
@@ -13,7 +13,6 @@ __lua__
 --Maybe add a # of rounds, and declare a winner (probably by total kills, total cash for tie breaking)
 
 --Weapons:
---Shield - most of the time I shot the inside of my own shield.
 --Air raid - really misses most of the time. perhaps the bombs need to fall more directly on the target point.
 
 --AI:
@@ -21,7 +20,6 @@ __lua__
 --Sometimes they just shoot themselves. I don't know what's happening there.
 
 --Buy rounds:
---The money is way too much. Cut rewards in half at the least.
 --AI should spend their own money. Just have them buy the most expensive thing they can afford until they're broke.
 
 --QOL if tokens allow:
@@ -38,7 +36,7 @@ far_l,far_r,shield_r,defl_r,offset,offset_x,offset_y,shakemag=0,128,8,6,0,0,0,2
 titleidx,titletime,bgframe,statetime,camspeed,tankspeed,gravity,titlefade = 1,1,0,0,90,10,30,false
 text="in the year 30xd, there were... a bunch of tanks... that started... fighting!"
 
-startcolours,mapsizes,mapsize,bolttime = { 7, 7, 7, 6, 13, 6}, {"small","medium","large"}, 2, 60
+startcolours,mapsizes,mapsize,bolttime,rounds = { 7, 7, 7, 6, 13, 6}, {"small","medium","large"}, 2, 60, 5
 bloomtypes={
     0x028e, --red
     0x289a, --yellow/orange
@@ -135,10 +133,11 @@ end
 function initgame()
  colourlist={1,2,3,4,5,6,7,8,9,10,11}
  tanks={}
+ cround = 1
  cpus = mid(0, cpus, players)
- dset(0,2) dset(1,players) dset(2,cpus) dset(3,mapsize)
+ dset(0,3) dset(1,players) dset(2,cpus) dset(3,mapsize) dset(4,rounds)
  --here we add tanks based on game mode
- for i=players,1,-1 do
+ for i=players,1,0xFFFF do
   local team = colourlist[rndi(#colourlist)+1]
   del(colourlist, team)
   add_tank(team, i<=cpus) -- team
@@ -230,7 +229,7 @@ function spawnbolt(vec)
  local x,y,xo,yo=vec.x,vec.y,4,6
  for i=0,10,1 do
 	 local off,ly=flr(rnd(xo+3))
-	 if(rnd(1) >.5) off = off * -1
+	 if(rnd(1) >.5) off = off * 0xFFFF
 	 local seg={}
 	 add(seg,{x,y,x+off,y-yo})
 	 x+=off
@@ -319,7 +318,7 @@ function updatebullets()
    local dist= v_len(diff.x, diff.y)
    if t.health <= 0 then -- nuffin
    elseif t.shield and t.shp > 0 then
-    if dist <= shield_r and (t!=ct or b.life > 10) then
+    if dist <= shield_r and (t ~= ct or b.life > 20) then
      -- hit shield, explode
      hit = true
      local ehp = t.shp * 25 - (itm.dmg or 0)
@@ -333,7 +332,7 @@ function updatebullets()
      end
     end
    elseif t.deflector and t.shp > 0 then
-    if dist <= defl_r and (t!=ct or b.life > 10) then
+    if dist <= defl_r and (t!=ct or b.life > 20) then
      -- hit deflector, calculate bounce
      local normal = v_normalized(diff)
      local vel = v_new(b.velx,b.vely * 0xffff)
@@ -351,7 +350,7 @@ function updatebullets()
      -- hit tank, explode
      t.health -= itm.dmg
      ct.hittarget = true
-     if(t != ct) ct.cash += itm.dmg * 10
+     if(t != ct) ct.cash += itm.dmg * 5
      hit = true
     end
    end
@@ -446,7 +445,7 @@ function updateblooms(firing)
      if(t.deflector and t.shp > 0) dmg *=.75 t.shp -= 1
      -- round up the damage to whole numbers.
      t.health -= ceil(dmg)
-     if(t != ct) ct.cash += ceil(dmg) * 100
+     if(t != ct) ct.cash += ceil(dmg) * 50
     end
    end
   end
@@ -493,7 +492,7 @@ end
 
 function updatebolt()
  if(bolttime < 60) bolttime+=1
- if(bolttime == 30) local seg = bolt[1][1] addbloom(1, seg[1], seg[2], 4, 50) setshake(2.5,.3)
+ if(bolttime == 30) local seg = bolt[1][1] addbloom(3, seg[1], seg[2], 4, 50) setshake(2.5,.3)
 end
 
 function updatemovecam()
@@ -711,15 +710,16 @@ function updatetitle()
   if statetime >= 72 then
    nextstate = pregame
    statetime = 72
+   onsettings = false
    initgame()
   end
  elseif onsettings then
   if(btnp"4" or btnp"5") startgame()
   if(btnp"3") setting_idx += 1 sfx"9"
   if(btnp"2") setting_idx -= 1 sfx"9"
-  setting_idx = wrappedvalue(setting_idx, 0, 2)
+  setting_idx = wrappedvalue(setting_idx, 0, 3)
   if btnp"1" then
-   changesetting(1)
+   changesetting"1"
   elseif btnp"0" then
    changesetting(0xffff)
   end
@@ -742,11 +742,13 @@ end
 function changesetting(amt)
  if setting_idx == 0 then players += amt
  elseif setting_idx == 1  then cpus += amt
- else mapsize += amt end
+ elseif setting_idx == 2 then mapsize += amt
+ else rounds += amt end
  sfx"9"
  players = wrappedvalue(players, 2, 8)
  cpus = wrappedvalue(cpus, 0, 8)
  mapsize = wrappedvalue(mapsize, 1, #mapsizes)
+ rounds = wrappedvalue(rounds, 1, 20)
 end
 
 function startgame()
@@ -820,12 +822,9 @@ function updatepostgame()
  statetime += 1
  if statetime > 72 then
   statetime = 72
-  if(btnp"4" or btnp"5") nextstate = shop activetank = 1 shopitem = 1
+  if(btnp"4" or btnp"5") nextstate = shop activetank = 1 shopitem = 1 cround += 1
+  if(cround > rounds) nextstate = title
  end
-end
-
-function updatesplash()
-
 end
 
 function updatecamera()
@@ -865,11 +864,14 @@ function _draw()
   pal()
   rect(0,0,127,127,7)
   rectfill(1,1,126,126,0)
+  if cround < rounds then print("round " .. cround, 48, 16, 7)
+  else print("final round", 42, 16, 7) end
   for i=1,#tanks,1 do
    local t = tanks[i]
    local name,y = teams[t.team].name,16 + i*10
-   print(name, 16 + (3-#name)*4, y, 7)
-   print( "  k:" .. t.k .. " d:" .. t.d .. "  $" .. t.cash, 24, y, 7)
+   print(name, 15 + (3-#name)*4, y, 7)
+   print("  k:" .. t.k .. " d:" .. t.d .. " $" .. t.cash, 22, y, 7)
+   print(getwinmsg(t), 86, y, 10)
   end
  end
 end
@@ -947,7 +949,7 @@ function drawgame()
  end
  if bolttime<60 then
   if(bolttime>20 and bolttime < 38) then
-	 for i=#bolt,max((#bolt-(bolttime-20)),1),-1 do
+	 for i=#bolt,max((#bolt-(bolttime-20)),1),0xFFFF do
 	  local v=bolt[i]
 	  line(v[1][1],v[1][2],v[1][3],v[1][4],10)
 	  line(v[2][1],v[2][2],v[2][3],v[2][4],10)
@@ -1105,11 +1107,12 @@ function drawlogo()
   titlefade = true
   statetime += 1
  end
- if logotimer > 200 or btnp() > 0 then
+ if logotimer > 200 or btnp() ~= 0 then
   nextstate = title
   titlefade = false
   statetime = 0
   if(dget"0" > 0) players = dget"1" cpus = dget"2" mapsize = dget"3"
+  if(dget"0" > 2) rounds = dget"4"
   sfx(0xFFFF,0)
   music"0"
   cls()
@@ -1145,12 +1148,13 @@ function drawtitle()
 end
 
 function drawsettings()
- rectfill(30,85,97,107,0)
- rect(30,85,97,107,6)
+ rectfill(30,85,97,113,0)
+ rect(30,85,97,113,6)
  
  print("tanks   :" .. players, 36, 88, 7)
  print("cpus    :" .. cpus, 36, 94, 7)
  print("map size:" .. mapsizes[mapsize], 36, 100, 7)
+ print("rounds  :" .. rounds, 36, 106, 7)
  circ(33,90 + 6 * setting_idx, 1, 10)
 end
 
@@ -1207,6 +1211,16 @@ function randomtank()
   if(tk != ct and tk.health > 0) t = tk
  end
  return t
+end
+
+function getwinmsg(tank)
+ local k,c,d = tank.k,tank.cash,tank.d
+ for t in all(tanks) do
+  if (t ~= tank and t.k > k) return ""
+  if (t ~= tank and t.k == k and t.d < d) return ""
+  if (t ~= tank and t.k == k  and t.d == d and t.cash > c) return ""
+ end
+ return "★winner★"
 end
 
 function useitem()
@@ -1322,10 +1336,6 @@ end
 
 function round(a)
  return flr(a + .5)
-end
-
-function v_round(v)
-	return v_new(round(v.x),round(v.y))
 end
 
 function lerp(v0, v1, t)
