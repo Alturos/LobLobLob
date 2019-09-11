@@ -5,19 +5,10 @@ __lua__
 -- bright moth games
 
 -- known bugs:
--- engine sound plays forever when moving at end of turn
 -- camera doesn't track to next player after death
-
---Playtest notes:
---Menu/gameplay:
---Maybe add a # of rounds, and declare a winner (probably by total kills, total cash for tie breaking)
 
 --Weapons:
 --Air raid - really misses most of the time. perhaps the bombs need to fall more directly on the target point.
-
---AI:
---Sometimes the AI tries to shoot you through the other side of the screen. Making them a sitting duck.
---Sometimes they just shoot themselves. I don't know what's happening there.
 
 --Buy rounds:
 --AI should spend their own money. Just have them buy the most expensive thing they can afford until they're broke.
@@ -50,7 +41,7 @@ items={
  { ico=49, name="lazr ", dmg=85, spalsh=0, c=9, cost = 750, stock = 1 },
  { ico=50, name="mirv ", dmg=25, spalsh=50, size=8, mag=2, duration=.095, c=15, cost = 750},
  { ico=40, name="araid", dmg=0, splash=0, size=0, mag=0, duration=.095, c=7, stock = 1, cost = 2000},
- { ico=35, name="shld ", stock = 1, cost = 250 },
+ { ico=35, name="shld ", cost = 250 },
  { ico=48, name="defl ", cost = 500 },
  { ico=51, name="chute", stock = 1, cost = 50},
  { ico=52, name="fuel ", stock = 4, cost = 50 },
@@ -371,11 +362,10 @@ function updatebullets()
     plbtime = 20
     pltarget = b.x
     ply = min(b.y - 72, 24) 
-    plflip = false
-    plx = fieldwidth
+    plflip = true
+    plx = -32
     plbombcount=raidbombs
     sfx(61,3)
-    if(b.x > 128) plflip = true plx = -32
    elseif itm.name == "bolt " then
     spawnbolt(b)
    elseif itm.name == "leap " and not b.split then
@@ -439,7 +429,7 @@ function updateblooms(firing)
     local dist= v_len(diff.x, diff.y)
     if bl.dmg > 0 and t.health > 0 and dist <= bl.size then
      -- linear interpolate damage over the blast radius
-     local dmg = lerp(1, bl.dmg, dist/bl.size)
+     local dmg = lerp(1, bl.dmg * 1.5, dist/bl.size)
      -- shields eat half of any remaining damage, deflectors 25%
      if(t.shield and t.shp > 0) dmg *= .5 t.shp -= 1
      if(t.deflector and t.shp > 0) dmg *=.75 t.shp -= 1
@@ -459,25 +449,20 @@ function updateplane()
  if(not plactive) return
  camtarget = v_new(plx, ply+40)
  local velx = plspeed * step
- if(not plflip) velx *= 0xffff
  plx += velx
  pltime += 1
- if (plflip and plx > fieldwidth + 32) or (plx < -32 and not plflip) then
+ if (plx > fieldwidth + 32) then
   plactive = false
   sfx(-2,3)
  end
  if(pltime > 2) plalt = not plalt pltime = 0
- plnose,pltail = plx, plx+8
- plbayx = pltail+5
- if(plflip) plnose = plx + 24 pltail = plx plbayx = pltail+13
+ plnose = plx + 24 pltail = plx plbayx = pltail+13
  
- if(plflip and plbayx > pltarget-(2.5*plspeed) and plbayx < pltarget)
-   or (not plflip and plbayx > pltarget and plbayx < pltarget+(plspeed*2.5)) then
+ if(plbayx > pltarget-(2.5*plspeed) and plbayx < pltarget) then
   if(not plopen) sfx"59"
   plopen = true
   plbtime -= 1
   local bsp = plspeed
-  if(not plflip) bsp *= 0xffff
   if plbtime < 1 and plbombcount > 0 then
    plbtime = 20 
    addbomb(plbayx + 2, ply + 16, bsp, 0, plflip, 1) 
@@ -492,7 +477,7 @@ end
 
 function updatebolt()
  if(bolttime < 60) bolttime+=1
- if(bolttime == 30) local seg = bolt[1][1] addbloom(3, seg[1], seg[2], 4, 50) setshake(2.5,.3)
+ if(bolttime == 30) local seg = bolt[1][1] addbloom(3, seg[1], seg[2], 4, 100) setshake(2.5,.3)
 end
 
 function updatemovecam()
@@ -550,22 +535,8 @@ function updateaim()
  message="aim"
  local pw,ang,x,y = 0,0,0,0,0,0
  if ct.cpu then
-  if not ct.target or ct.target.health < 1 then
-   -- pick new target
-   ct.target = randomtank()
-   setupshots()
-  elseif ct.hittarget then
-   -- hit last time fire again, todo: track movement?
-   setupfire()
-  else
-   -- we have a target, and we missed it, adjust and try again
-   local dif,a = ct.target.x - ct.lastshot.x, ct.angle
-   local absdif = abs(dif)
-   if absdif >= 16 and ct.hishot then ct.angle = ct.hishot ct.hishot = nil
-   elseif(dif > 0 and a < 90) or (dif < 0 and a > 90) then ct.power += rndi(abs(dif) / 2) + 1
-   else ct.power -= rndi(absdif / 2) + 1 end
-   setupfire()
-  end
+  cpudecide()
+  if(ct.item > 7) useitem() return
  else
   if (btn"2") pw += 1
   if (btn"3") pw -= 1
@@ -595,6 +566,47 @@ function setupfire()
  nextstate = firing
 end
 
+function cpudecide()
+ ct.item = 0
+ if not ct.shield and not ct.deflector then
+  if(rndi(3) == 1) then
+   if cthasstock(9) then ct.item = 9
+   elseif cthasstock(8) then ct.item = 8 end
+   if(ct.item > 1) nextstate = firing return
+  end
+ end
+ 
+ if not ct.target or ct.target.health < 1 then
+  -- pick new target
+  ct.target = randomtank()
+  cpupickweapon()
+  setupshots()
+ elseif ct.hittarget or not ct.lastshot then
+  -- hit last time fire again, todo: track movement?
+  cpupickweapon()
+  setupfire()
+ else
+  -- we have a target, and we missed it, adjust and try again
+  local dif,a = ct.target.x - ct.lastshot.x, ct.angle
+  local absdif = abs(dif)
+  if absdif >= 16 and ct.hishot then ct.angle = round(ct.hishot * 360) ct.hishot = nil
+  elseif(dif > 0 and a < 90) or (dif < 0 and a > 90) then ct.power += rndi(abs(dif) / 2) + 1
+  else ct.power -= rndi(absdif / 2) + 1 end
+  cpupickweapon()
+  setupfire()
+ end
+end
+
+function cpupickweapon()
+ while ct.item < 1 do
+  local itm = rndi(7) + 1
+  if(rndi(4) > 2) ct.item = 1 -- half of the time use the shell.
+  if(cthasstock(itm)) ct.item = itm
+  -- can't use the laser on someone below them.
+  if(itm == 5 and ct.target.y > ct.y) ct.item = 0
+ end
+end
+
 function setupshots()
  shots,powers,power = {},{80,75,60,55,35,45,90,25,16,40,50}
  while not shots.low and not shots.hi do
@@ -602,8 +614,9 @@ function setupshots()
   shots = calc_arc(v_mult(ct, .1), power * .1, v_mult(ct.target, .1), gravity * .1)
  end
  local ang = shots.low
- if not shots.low or abs(ct.target.y - ct.y) > 12 or  rndi"2" == 1 then ang = shots.hi
- else ct.hishot = shots.hi end
+ -- if we don't have a low shot, are using a high angle weapon, there is too great a hight difference, or we just feel like it, use high
+ if not shots.low or ct.item == 7 or ct.item == 2 or ct.item == 6 or abs(ct.target.y - ct.y) > 12 or rndi"2" == 1 then ang = shots.hi
+ else ct.hishot = shots.hi end -- otherwise, save it for later
  ct.power = power
  ct.angle = round(ang * 360)
  setupfire()
@@ -770,33 +783,47 @@ function updateitemmenu()
 end
 
 function updateshop()
-  message="shop $" .. ct.cash --"select item"
+  message="shop $" .. ct.cash
   if titlefade then
    statetime += 1
    if(statetime > 72) statetime = 72 nextstate = pregame resetround()
+   return
   end
-  updateitemmenu()
-  if btnp"5" then
+  if ct.cpu then
+   if not cthasstock(9) and ctcanafford(9) then ctbuyitem(9)
+   elseif not cthasstock(8) and ctcanafford(8) then ctbuyitem(8) end
+   for i = 1,4,1 do
+    local itm = rndi(6)+2
+    if(ctcanafford(itm) and ct.stock[itm] < 5) ctbuyitem(itm)
+   end
+   if(ctcanafford(12) and rndi(20) == 1 and not cthasstock(12)) ctbuyitem(12)
+   shopnext()
+  else
+   updateitemmenu()
+   if btnp"5" then
     -- purchase
     itm = items[shopitem]
     if itm.cost < 1 or itm.cost > ct.cash or ct.stock[shopitem] > 98 then sfx"11"
     else
-     ct.cash -= itm.cost
-     ct.stock[shopitem] += 1
+     ctbuyitem(shopitem)
      sfx"10"
     end
+   end
+   if btnp"4" then
+    shopnext()
+   end
   end
-  if btnp"4" then
-   -- next
-   if activetank < #tanks then activetank += 1
-   else titlefade = true statetime = 0 end
-   sfx"12"
- end
+end
+
+function shopnext()
+ if activetank < #tanks then activetank += 1
+ else titlefade = true statetime = 0 end
+ sfx"12"
 end
 
 function updateselect()
  show_itemselect=true
- message="shop $" .. ct.cash --"select item"
+ message="shop $" .. ct.cash
  updateitemmenu()
  if(btnp"4") nextstate = movecam  sfx"11"
  if btnp"5" then
@@ -823,7 +850,7 @@ function updatepostgame()
  if statetime > 72 then
   statetime = 72
   if(btnp"4" or btnp"5") nextstate = shop activetank = 1 shopitem = 1 cround += 1
-  if(cround > rounds) nextstate = title
+  if(cround > rounds) nextstate = title music"0"
  end
 end
 
@@ -1215,6 +1242,7 @@ end
 
 function getwinmsg(tank)
  local k,c,d = tank.k,tank.cash,tank.d
+ if(cround < rounds) return ""
  for t in all(tanks) do
   if (t ~= tank and t.k > k) return ""
   if (t ~= tank and t.k == k and t.d < d) return ""
@@ -1249,6 +1277,19 @@ function firelaser()
   local b = addbloom(2, sx + ax * i, sy + ay * i, 1, items[5].dmg, i==129)
  end
  addbloom(3, sx, sy, 3, 0)
+end
+
+function cthasstock(itm)
+ return ct.stock[itm] > 0
+end
+
+function ctbuyitem(itm)
+ ct.cash -= items[itm].cost
+ ct.stock[itm] += 1
+end
+
+function ctcanafford(itm)
+ return ct.cash >= items[itm].cost
 end
 
 function calculate_grade(t)
