@@ -1,0 +1,4 @@
+..\index.html
+..\lob.js
+..\icon.png
+..\lob.wasm

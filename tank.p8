@@ -10,9 +10,6 @@ __lua__
 --Weapons:
 --Air raid - really misses most of the time. perhaps the bombs need to fall more directly on the target point.
 
---Buy rounds:
---AI should spend their own money. Just have them buy the most expensive thing they can afford until they're broke.
-
 --QOL if tokens allow:
 --Different music for the buy store?
 --Otherwise, holy shit is this game fun. I felt I could genuinely play against the AI and I didn't always win. So that's great. Obviously if the AI used more of the crazy weapons that'd be fun, but still, it's pretty solid for a prerelease candidate.

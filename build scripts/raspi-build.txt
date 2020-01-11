@@ -1,0 +1,3 @@
+..\lob.bin\raspi\lob
+..\lob.bin\raspi\data.pod
+..\lob.bin\raspi\lob.png

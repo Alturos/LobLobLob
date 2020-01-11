@@ -1,0 +1,3 @@
+..\lob.bin\linux\lob
+..\lob.bin\linux\lob.png
+..\lob.bin\linux\data.pod

@@ -1,0 +1,3 @@
+..\lob.bin\windows\lob.exe
+..\lob.bin\windows\data.pod
+..\lob.bin\windows\SDL2.dll
